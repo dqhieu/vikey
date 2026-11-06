@@ -438,6 +438,7 @@ final class KeyboardView: UIView {
         }
         for (def, v) in keys {
             var bg = key, tint = fg
+            if def.kind == .shift { bg = .systemBlue; tint = .white }   // always blue, like a blue Return (Hieu)
             if def.kind == .returnKey && returnIsBlue { bg = .systemBlue; tint = .white }
             if def.kind == .returnKey && returnIsDone { bg = .systemGreen; tint = .white }
             if def.kind == .language && langTop && languageShort == "VI" {   // tinted in Vietnamese, neutral in English

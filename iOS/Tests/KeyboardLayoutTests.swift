@@ -231,3 +231,20 @@ final class LateTouchHapticTests: XCTestCase {
         XCTAssertEqual(Diag.haptics, start + 2, "an on-time touch vibrates")
     }
 }
+
+/// The shift key is always blue with a white arrow (Hieu), in light and dark, on every letter page state.
+final class ShiftTintTests: XCTestCase {
+    func testShiftIsBlue() {
+        for dark in [false, true] {
+            let kb = KeyboardView(frame: CGRect(x: 0, y: 0, width: 402, height: KeyboardView.keyboardHeight(compactHeight: false)))
+            kb.dark = dark
+            kb.layoutIfNeeded()
+            for state in [KeyboardView.Shift.off, .on, .locked] {
+                kb.shift = state
+                let shift = kb.subviews.compactMap { $0 as? KeyCap }.first { $0.icon.image?.description.contains("system: shift") == true || $0.icon.image?.description.contains("system: capslock") == true }
+                XCTAssertEqual(shift?.fill, .systemBlue, "dark \(dark), \(state): blue")
+                XCTAssertEqual(shift?.icon.tintColor, .white, "dark \(dark), \(state): white arrow")
+            }
+        }
+    }
+}

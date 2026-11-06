@@ -298,6 +298,9 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
         super.viewDidAppear(animated)
         keyboard.animatesLanguage = true
         hasAppeared = true
+        // iOS holds back touches near the screen's left and right edges while its own edge swipes decide: a tap on the
+        // outer edge of shift, delete, 123 or return reached us late (and lost its vibration, Hieu). Keys don't wait.
+        for g in view.window?.gestureRecognizers ?? [] { g.delaysTouchesBegan = false }
         comingUp = false; setContentVisible(true)
         keyboard.playMarkIntro()
         readSelection()   // opened onto text that's already selected

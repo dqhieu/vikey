@@ -208,3 +208,26 @@ final class CornerKeyInvisibleTests: XCTestCase {
         XCTAssertEqual(cap?.normalColor, .clear)
     }
 }
+
+/// A tap iOS held back at the screen's edge (outer edge of shift, delete, 123, return) still vibrates (Hieu); only a
+/// backlog of touches (a key already vibrated since this finger landed) stays quiet.
+final class LateTouchHapticTests: XCTestCase {
+    func testLateTouchVibratesUnlessBacklog() {
+        let kb = KeyboardView(frame: CGRect(x: 0, y: 0, width: 402, height: KeyboardView.keyboardHeight(compactHeight: false)))
+        kb.haptics = true
+        kb.layoutIfNeeded()
+        let cap = kb.subviews.compactMap { $0 as? KeyCap }.first!
+        let start = Diag.haptics
+
+        kb.press(cap, landed: CACurrentMediaTime() - 0.3)   // held back 300 ms, nothing else pressed
+        XCTAssertEqual(Diag.haptics, start + 1, "a lone late touch vibrates")
+
+        Thread.sleep(forTimeInterval: 0.06)                  // past the one-vibration-per-press window
+        kb.press(cap, landed: CACurrentMediaTime() - 0.3)   // landed before the last vibration: a backlog
+        XCTAssertEqual(Diag.haptics, start + 1, "a backlog touch stays quiet")
+
+        Thread.sleep(forTimeInterval: 0.06)
+        kb.press(cap, landed: CACurrentMediaTime())          // on time
+        XCTAssertEqual(Diag.haptics, start + 2, "an on-time touch vibrates")
+    }
+}

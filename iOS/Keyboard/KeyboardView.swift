@@ -487,13 +487,17 @@ final class KeyboardView: UIView {
         feedback.tick()
     }
 
-    /// `late`: the touch reached us long after the finger landed (the keyboard was busy). Its vibration is
-    /// skipped, or a backlog of touches would buzz two or three times in a row.
-    private func press(_ c: KeyCap, late: Bool = false) {
+    /// `landed`: when the finger came down. A touch that reaches us late (the keyboard was busy, or iOS held back a
+    /// touch at the screen's edge) still vibrates, unless a key already vibrated since that finger landed: then it
+    /// is part of a backlog, which would buzz two or three times in a row.
+    func press(_ c: KeyCap, landed: CFTimeInterval) {
         c.fill = c.pressedColor
         if Self.markOn && langTop, keys.first(where: { $0.view === c })?.def.kind == .language { mark.pressed() }
-        if late { Diag.late += 1; return }
-        if haptics { tick() } else { UIDevice.current.playInputClick() }
+        if CACurrentMediaTime() - landed > 0.05 {
+            Diag.late += 1
+            if lastHaptic > landed { return }
+        }
+        if haptics { tick() } else { lastHaptic = CACurrentMediaTime(); UIDevice.current.playInputClick() }
     }
     private func release(_ c: KeyCap) { c.fill = c.normalColor }
 
@@ -519,7 +523,7 @@ final class KeyboardView: UIView {
                 if picked != 0, let pc = letterCaps[Character(UnicodeScalar(UInt8(bitPattern: picked)))], let pk = kind(of: pc) { c = pc; k = pk }
             }
             touch = t; touchKey = c; touchStart = p; slideFromLayer = false
-            press(c, late: CACurrentMediaTime() - t.timestamp > 0.05)
+            press(c, landed: t.timestamp)
             switch k {
             case .char:
                 if traitCollection.horizontalSizeClass == .compact && layer_ != .numpad { popup.show(over: c, in: self) }

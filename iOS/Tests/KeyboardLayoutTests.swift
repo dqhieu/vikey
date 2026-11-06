@@ -16,6 +16,39 @@ final class KeyboardLayoutTests: XCTestCase {
     }
     private func titles(_ kb: KeyboardView) -> [String] { kb.subviews.compactMap { ($0 as? KeyCap)?.label.text } }
 
+    /// Paste takes the emoji key's place in the bottom row; layouts that had no emoji key get no Paste key either.
+    func testPasteReplacesEmoji() {
+        func caps(_ kb: KeyboardView, symbol: String) -> [KeyCap] {   // a symbol image's description names it
+            kb.subviews.compactMap { $0 as? KeyCap }.filter { $0.icon.image?.description.contains("system: \(symbol)") == true }
+        }
+        for layer in [KeyboardView.Layer.letters, .numbers, .symbols] {
+            let kb = render(.default, layer: layer, "paste_\(layer)")
+            let paste = caps(kb, symbol: "clipboard")
+            XCTAssertEqual(paste.count, 1, "\(layer): one Paste key")
+            XCTAssertGreaterThan(paste.first?.frame.minY ?? 0, 150, "\(layer): in the bottom row")
+            XCTAssertTrue(caps(kb, symbol: "face.smiling").isEmpty, "\(layer): no emoji key")
+        }
+        XCTAssertTrue(caps(render(.emailAddress, "paste_email"), symbol: "clipboard").isEmpty, "email: @ and . instead")
+    }
+
+    /// VI/EN sits in the bottom row right after Paste, with the suggestion strip on or off.
+    func testLanguageKeyNextToPaste() {
+        KeyboardView.langStyle = 0
+        defer { KeyboardView.barOn = false }
+        for bar in [true, false] {
+            KeyboardView.barOn = bar
+            let kb = render(.default, bar ? "language_strip" : "language_nostrip")
+            let caps = kb.subviews.compactMap { $0 as? KeyCap }.filter { !$0.isHidden }
+            let bottom = caps.map(\.frame.minY).max() ?? 0
+            let row = caps.filter { abs($0.frame.minY - bottom) < 1 }.sorted { $0.frame.minX < $1.frame.minX }
+            let paste = row.firstIndex { $0.icon.image?.description.contains("system: clipboard") == true }
+            let language = row.firstIndex { $0.label.text == "VI" }
+            XCTAssertNotNil(paste, "strip \(bar): Paste in the bottom row")
+            XCTAssertEqual(language, paste.map { $0 + 1 }, "strip \(bar): VI right after Paste")
+            XCTAssertTrue(kb.mark.isHidden, "strip \(bar): no corner pill")
+        }
+    }
+
     func testEmailHasAtAndDot() { let t = titles(render(.emailAddress, "email")); XCTAssertTrue(t.contains("@") && t.contains(".")) }
     func testURLHasSlashAndDotCom() { let t = titles(render(.URL, "url")); XCTAssertTrue(t.contains("/") && t.contains(".com")) }
     func testWebSearchHasDot() { XCTAssertTrue(titles(render(.webSearch, "websearch")).contains(".")) }
@@ -85,14 +118,15 @@ final class SystemKeyboardGeometryTests: XCTestCase {
         let q = try XCTUnwrap(frame("q")), a = try XCTUnwrap(frame("a")), z = try XCTUnwrap(frame("z")), p = try XCTUnwrap(frame("p"))
         let top = q.minY
         func near(_ v: CGFloat, _ want: CGFloat, _ what: String) { XCTAssertEqual(v, want, accuracy: 0.5, what) }
-        near(q.minX, 6.67, "q x"); near(q.width, 37.33, "letter width"); near(q.height, 45, "key height")
+        near(q.minX, 6.67, "q x"); near(q.width, 37.33, "letter width")
+        near(q.height, 48, "key height (taller than the system's 45)")
         near(p.maxX, 433.67, "p right edge")
-        near(a.minX, 28.0, "a x"); near(a.minY - top, 56, "row pitch")
-        near(z.minX, 71.33, "z x"); near(z.minY - top, 112, "row 3")
+        near(a.minX, 28.0, "a x"); near(a.minY - top, 54, "row pitch: rows 6 pt apart")
+        near(z.minX, 71.33, "z x"); near(z.minY - top, 108, "row 3")
         // row 3 sides: shift 6.67 w 50.0, delete 383.33 w 50.33; bottom row: 123 w 48 at 6.67, return 331.33 w 102.33
         let row3 = caps.filter { abs($0.frame.minY - z.minY) < 1 }.sorted { $0.frame.minX < $1.frame.minX }
         near(row3.first!.frame.width, 50, "shift width"); near(row3.last!.frame.minX, 383.33, "delete x")
-        let bottom = caps.filter { abs($0.frame.minY - (top + 168)) < 1 }.sorted { $0.frame.minX < $1.frame.minX }
+        let bottom = caps.filter { abs($0.frame.minY - (top + 162)) < 1 }.sorted { $0.frame.minX < $1.frame.minX }
         near(bottom.first!.frame.width, 48, "123 width"); near(bottom.last!.frame.minX, 331.33, "return x"); near(bottom.last!.frame.width, 102.33, "return width")
     }
 }

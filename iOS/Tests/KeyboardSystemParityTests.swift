@@ -32,6 +32,17 @@ final class KeyboardSystemParityTests: XCTestCase {
     func testLetsMidSentenceStaysAVerb() { let (vc, p) = make(); type("she lets me ", vc); XCTAssertEqual(p.text, "She lets me ") }
     func testWont() { let (vc, p) = make(); type("i wont go ", vc); XCTAssertEqual(p.text, "I won't go ") }
 
+    /// Word suggestions off: no strip, but auto-correct still fixes words at the space.
+    func testAutoCorrectWithoutTheStrip() {
+        let d = VKSettings.defaults
+        d.set(false, forKey: VKSettings.Key.suggestions)
+        defer { d.removeObject(forKey: VKSettings.Key.suggestions) }
+        let (vc, p) = make()
+        XCTAssertFalse(KeyboardView.barOn, "no strip without word suggestions")
+        type("i wont see teh cat ", vc)
+        XCTAssertEqual(p.text, "I won't see the cat ")
+    }
+
     // auto-capitals
     func testCapitalAfterDotFrom123() {   // the period from the 123 page, then space: back on ABC with the capital
         for lang in [0, 1] {

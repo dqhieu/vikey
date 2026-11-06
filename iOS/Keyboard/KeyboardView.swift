@@ -14,7 +14,8 @@ enum Diag {
 /// What a key does.
 enum KeyKind: Equatable {
     case char(String)      // inserts this (letters stored lowercase)
-    case shift, backspace, space, returnKey, globe, language, emoji
+    case shift, backspace, space, returnKey, globe, language, paste
+    case emoji             // opens the emoji keyboard; no key has it since Paste took its place
     case layer(KeyboardView.Layer)
 }
 
@@ -37,8 +38,9 @@ protocol KeyboardViewDelegate: AnyObject {
 }
 
 /// The iOS 26 system keyboard, measured from the simulator (iPhone 17 Pro, 402 pt wide) and copied:
-/// key 43 pt tall, rows 54 pt apart, 6 pt gaps, a 52 pt strip on top (where the system shows
+/// 6 pt gaps, a 52 pt strip on top (where the system shows
 /// suggestions; here it gives the top-row key popups room, since iOS clips a keyboard to its view).
+/// Keys are 46 pt tall, not the system's 43, with rows 6 pt apart like the keys side by side.
 /// Touches are handled by this view, not per key, so fast typing between keys never gets lost.
 final class KeyboardView: UIView {
     enum Layer { case letters, numbers, symbols, numpad }   // numpad: number, phone and decimal fields
@@ -98,12 +100,13 @@ final class KeyboardView: UIView {
     let feedback = KeyHaptics()
 
     // geometry (portrait iPhone; scaled for other widths; landscape rows are shorter)
-    /// The suggestion strip is shown when suggestions or auto-correct are on; without it the keys
-    /// start right away (Tony: no empty strip). Diagnostics add a readout line above it.
+    /// The suggestion strip is shown only when word suggestions are on; without it the keys start right away
+    /// (Tony: no empty strip), and auto-correct still works, just without showing its fix first.
+    /// Diagnostics add a readout line above it.
     static var barOn = false
-    /// Where the VI/EN key sits: 0 = bottom row (today); 1-3 = design proposals for the top-left corner of the
-    /// suggestion strip (Tony): 1 a "VI" pill, 2 a "VI | EN" switch, 3 a "VI ⇄" chip. Only renders use 1-3 for now.
-    static var langStyle = 1   // Tony picked the pill (A); the bottom row is the fallback when the strip is off
+    /// Where the VI/EN key sits: 0 = bottom row, next to Paste; 1-3 = the top-left corner of the suggestion strip
+    /// (Tony's proposals): 1 a "VI" pill, 2 a "VI | EN" switch, 3 a "VI ⇄" chip. Only renders use 1-3 now.
+    static var langStyle = 0
     private var langTop: Bool { Self.langStyle > 0 && Self.barOn && Self.searchTop == nil && layer_ != .numpad }
     private var langTopWidth: CGFloat { [0, 50, 96, 70][min(Self.langStyle, 3)] }
     /// The corner element: VI/EN switch and Vikey mark in one (LangMark.swift, Tony picked design A). Off = the plain
@@ -128,12 +131,13 @@ final class KeyboardView: UIView {
     static func diagH(compactHeight: Bool) -> CGFloat { Diag.on ? (compactHeight ? 30 : 40) : 0 }
     /// Emoji search (EmojiKeyboardView): the search field and a row of results take the top instead of the strip.
     static var searchTop: CGFloat?
-    /// Pro Max-size iPhones (430-440 pt wide) have taller keys: 45 pt on a 56 pt pitch, measured on the iOS 26.5
-    /// system keyboard (iPhone 17 Pro Max); 43 on 54 below that (iPhone 17 Pro, 402 pt).
+    /// Keys are 48 pt tall on Pro Max-size iPhones (430-440 pt wide), 46 below that (Hieu); the iOS 26.5 system
+    /// keyboard's are 45 / 43. Rows are 6 pt apart, the same as the keys side by side (Hieu).
+    static let rowGap: CGFloat = 6
     static var portraitWidth: CGFloat { min(UIScreen.main.bounds.width, UIScreen.main.bounds.height) }
     static var tallKeys: Bool { portraitWidth >= 428 }
     static func metrics(compactHeight: Bool) -> (top: CGFloat, keyH: CGFloat, pitch: CGFloat, bottom: CGFloat) {
-        let keyH: CGFloat = tallKeys ? 45 : 43, pitch: CGFloat = tallKeys ? 56 : 54
+        let keyH: CGFloat = tallKeys ? 48 : 46, pitch = keyH + rowGap
         if let t = searchTop { return compactHeight ? (top: t, keyH: 34, pitch: 40, bottom: 4) : (top: t, keyH: keyH, pitch: pitch, bottom: 3) }
         let extra = diagH(compactHeight: compactHeight) + (barOn ? barH : 0)
         if compactHeight { return (top: 8 + extra, keyH: 34, pitch: 40, bottom: 4) }
@@ -163,10 +167,11 @@ final class KeyboardView: UIView {
     private func rowKinds() -> [[KeyKind]] {
         func chars(_ s: String) -> [KeyKind] { s.map { .char(String($0)) } }
         // the system's email, URL, web search and Twitter layouts have no emoji key: room for @ . / .com and the space bar
+        // (Paste sits where the system keyboard has emoji, so those layouts go without it too)
         let special = layer_ == .letters && [.emailAddress, .URL, .webSearch, .twitter].contains(fieldType)
-        var bottom: [KeyKind] = [layer_ == .letters ? .layer(.numbers) : .layer(.letters)] + (special ? [] : [.emoji])
+        var bottom: [KeyKind] = [layer_ == .letters ? .layer(.numbers) : .layer(.letters)] + (special ? [] : [.paste])
+        bottom.append(.language)   // VI/EN right after Paste
         if showsGlobe { bottom.append(.globe) }
-        bottom.append(.language)
         switch (layer_, fieldType) {   // like the system keyboard's email, URL, web search and Twitter layouts
         case (.letters, .emailAddress): bottom += [.space, .char("@"), .char(".")]
         case (.letters, .URL): bottom += [.char("."), .char("/"), .char(".com")]
@@ -268,7 +273,7 @@ final class KeyboardView: UIView {
                 }
                 frames.append(rect(W - side - fn, fn))
             default:
-                let small = lerp(43.33, 48), ret = lerp(93, 102.33)   // 123, emoji; return
+                let small = lerp(43.33, 48), ret = lerp(93, 102.33)   // 123, paste; return
                 var x = side
                 let fixed = row.filter { if case .char = $0 { return false }; return $0 != .space && $0 != .returnKey }.count
                 let charKeys = row.filter { if case .char = $0 { return true }; return false }.count
@@ -303,7 +308,7 @@ final class KeyboardView: UIView {
         let barX = side + (langTop ? langTopWidth + 8 : 0)
         let barY = langTop ? dh + side + Self.pillH / 2 - (Self.barH - 4) / 2 : dh + 2   // centred on the pill
         bar.frame = CGRect(x: barX, y: barY, width: W - side - barX, height: Self.barH - 4)
-        bar.showsBrand = !Self.markOn
+        bar.showsBrand = !Self.markOn   // no Vikey logo on an empty strip (only the old proposal renders had one)
         mark.isHidden = !(Self.markOn && langTop)
         if !mark.isHidden {
             // the key under the corner element is only a tap area; its colours may date from before the strip was on
@@ -343,6 +348,7 @@ final class KeyboardView: UIView {
             if returnIsDone { return (nil, UIImage(systemName: "checkmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .semibold))) }
             return returnTitle == "return" ? (nil, UIImage(systemName: "return", withConfiguration: sym)) : (returnTitle, nil)
         case .globe: return (nil, UIImage(systemName: "globe", withConfiguration: sym))
+        case .paste: return (nil, UIImage(systemName: "clipboard", withConfiguration: sym))
         case .emoji: return (nil, UIImage(systemName: "face.smiling", withConfiguration: sym))
         case .language: return (languageShort, nil)
         case .layer(let l): return (l == .letters ? "ABC" : (l == .numbers ? "123" : "#+="), nil)

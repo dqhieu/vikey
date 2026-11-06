@@ -213,7 +213,7 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
         haptics = d.bool(forKey: VKSettings.Key.haptics)
         suggestionsOn = d.bool(forKey: VKSettings.Key.suggestions)
         autoCorrectOn = d.bool(forKey: VKSettings.Key.autoCorrect)
-        KeyboardView.barOn = suggestionsOn || autoCorrectOn
+        KeyboardView.barOn = suggestionsOn   // auto-correct alone works without the strip
         Diag.on = d.bool(forKey: VKSettings.Key.diagnostics)
         keyboard?.diagnostics = Diag.on ? String(localized: "Gõ để xem thông số") : nil
         let browsingEmoji = emojiView.map { !$0.isHidden && !$0.searching } ?? false
@@ -432,9 +432,23 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
             refresh()
         case .globe:
             advanceToNextInputMode()
+        case .paste:
+            paste()
         case .emoji:
             showEmoji()
         }
+    }
+
+    /// The paste key: the pasteboard's text at the cursor, over a selection like Paste. A keyboard only gets the
+    /// pasteboard with Full Access; without it, or with nothing to paste, the key does nothing.
+    private func paste() {
+        guard hasFullAccess, let text = UIPasteboard.general.string, !text.isEmpty else { return }
+        selectionEdited()
+        lastCorrection = nil; keepWord = nil   // a Backspace after the paste deletes, it doesn't undo an old fix
+        proxy.insertText(text)
+        driver.resetContext()
+        clearWord()
+        afterEdit(deleted: 0, inserted: text)
     }
 
     func keyboardBackspaceRepeat(_ view: KeyboardView, count n: Int) {
@@ -617,7 +631,8 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
     func updateSuggestions() {
         suggestionsDirty = false
         if KeyboardView.barOn, correctsHere, showSpecialSuggestions() { return }
-        guard KeyboardView.barOn, correctsHere, !wordPrefix.isEmpty, !shownWord.isEmpty else {
+        // auto-correct decides its fix here too, so this runs with the strip hidden (the cells just don't show)
+        guard suggestionsOn || autoCorrectOn, correctsHere, !wordPrefix.isEmpty, !shownWord.isEmpty else {
             if !candidates.isEmpty || !(keyboard?.suggestions.isEmpty ?? true) { candidates = []; willCorrect = false; pendingFix = nil; keyboard.suggestions = [] }
             return
         }

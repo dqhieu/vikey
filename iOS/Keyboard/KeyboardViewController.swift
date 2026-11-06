@@ -120,6 +120,7 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
         super.viewWillAppear(animated)
         setAI(.none); selection = nil
         AIAssist.refresh()   // off the main thread: whether the model is there
+        refreshPasteReady()
         keyboard.animatesLanguage = false   // the pill takes the saved language without rolling while the keyboard comes up
         comingUp = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
@@ -312,12 +313,14 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
         readSelection()
         externalChange()
         refresh()
+        refreshPasteReady()
     }
 
     override func selectionDidChange(_ textInput: UITextInput?) {
         super.selectionDidChange(textInput)
         externalChange()
         readSelection()
+        refreshPasteReady()   // after a copy from the app's menu, the cursor moves next
     }
 
     /// What's selected in the app (only read when iOS says the selection or text changed, never per key).
@@ -440,6 +443,18 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
         case .emoji:
             showEmoji()
         }
+    }
+
+    /// The Paste key is tinted while the pasteboard has text. `hasStrings` doesn't read it (no "pasted from" banner);
+    /// checked when the keyboard comes up and when iOS reports a text or selection change, never per key, and only
+    /// asked again after the pasteboard's change count moved. Without Full Access a keyboard has no pasteboard.
+    private var pasteboardCount = -1
+    private func refreshPasteReady() {
+        guard hasFullAccess else { keyboard?.pasteReady = false; return }
+        let pb = UIPasteboard.general
+        guard pb.changeCount != pasteboardCount else { return }
+        pasteboardCount = pb.changeCount
+        keyboard?.pasteReady = pb.hasStrings
     }
 
     /// The paste key: the pasteboard's text at the cursor, over a selection like Paste. A keyboard only gets the

@@ -248,3 +248,76 @@ final class ShiftTintTests: XCTestCase {
         }
     }
 }
+
+/// The delete key is always red with a white icon (Hieu), in light and dark, on every page.
+final class DeleteTintTests: XCTestCase {
+    func testDeleteIsRed() {
+        for dark in [false, true] {
+            let kb = KeyboardView(frame: CGRect(x: 0, y: 0, width: 402, height: KeyboardView.keyboardHeight(compactHeight: false)))
+            kb.dark = dark
+            for layer in [KeyboardView.Layer.letters, .numbers, .symbols] {
+                kb.layer_ = layer
+                kb.layoutIfNeeded()
+                let delete = kb.subviews.compactMap { $0 as? KeyCap }.first { $0.icon.image?.description.contains("system: delete.left") == true }
+                XCTAssertEqual(delete?.fill, .systemRed, "dark \(dark), \(layer): red")
+                XCTAssertEqual(delete?.icon.tintColor, .white, "dark \(dark), \(layer): white icon")
+            }
+        }
+    }
+}
+
+/// VI is indigo with a white label, EN the plain key with an indigo label; Paste is tinted only with something to
+/// paste; a pressed key keeps its colour at half the opacity instead of turning white (Hieu).
+final class KeyTintTests: XCTestCase {
+    private func make(dark: Bool) -> KeyboardView {
+        KeyboardView.langStyle = 0
+        let kb = KeyboardView(frame: CGRect(x: 0, y: 0, width: 402, height: KeyboardView.keyboardHeight(compactHeight: false)))
+        kb.dark = dark
+        kb.layoutIfNeeded()
+        return kb
+    }
+    private func caps(_ kb: KeyboardView) -> [KeyCap] { kb.subviews.compactMap { $0 as? KeyCap } }
+    private func symbol(_ kb: KeyboardView, _ name: String) -> KeyCap? { caps(kb).first { $0.icon.image?.description.contains("system: \(name)") == true } }
+    private func alpha(_ c: UIColor?) -> CGFloat { c?.cgColor.alpha ?? -1 }
+
+    func testLanguageKeyTint() {
+        for dark in [false, true] {
+            let kb = make(dark: dark)
+            let plain = caps(kb).first { $0.label.text == "Q" || $0.label.text == "q" }!.fill
+            kb.languageShort = "VI"
+            let vi = caps(kb).first { $0.label.text == "VI" }!
+            XCTAssertNotEqual(vi.fill, plain, "dark \(dark): VI is tinted")
+            XCTAssertEqual(alpha(vi.fill), 1, "dark \(dark): a solid indigo")
+            XCTAssertEqual(vi.label.textColor, .white)
+            kb.languageShort = "EN"
+            let en = caps(kb).first { $0.label.text == "EN" }!
+            XCTAssertEqual(en.fill, plain, "dark \(dark): EN is the plain key")
+            XCTAssertNotEqual(en.label.textColor, .white, "dark \(dark): EN keeps the indigo label")
+        }
+    }
+
+    func testPasteTintOnlyWithSomethingToPaste() {
+        let kb = make(dark: false)
+        let plain = caps(kb).first { $0.label.text == "Q" || $0.label.text == "q" }!.fill
+        XCTAssertEqual(symbol(kb, "clipboard")?.fill, plain, "nothing to paste: plain")
+        kb.pasteReady = true
+        XCTAssertEqual(symbol(kb, "clipboard")?.fill, KeyboardView.pasteTint)
+        XCTAssertEqual(symbol(kb, "clipboard")?.icon.tintColor, .white)
+        kb.pasteReady = false
+        XCTAssertEqual(symbol(kb, "clipboard")?.fill, plain)
+    }
+
+    func testPressedKeepsTheColourAtHalfOpacity() {
+        let kb = make(dark: false)
+        for cap in [symbol(kb, "shift"), symbol(kb, "delete.left"), caps(kb).first { $0.label.text == "Q" || $0.label.text == "q" }] {
+            guard let cap else { return XCTFail("key missing") }
+            XCTAssertEqual(cap.pressedColor, KeyboardView.pressed(cap.normalColor))
+            XCTAssertEqual(alpha(cap.pressedColor), alpha(cap.normalColor) * 0.5, accuracy: 0.001)
+        }
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        symbol(kb, "shift")!.pressedColor.getRed(&r, green: &g, blue: &b, alpha: &a)
+        var r0: CGFloat = 0, g0: CGFloat = 0, b0: CGFloat = 0, a0: CGFloat = 0
+        UIColor.systemBlue.resolvedColor(with: kb.traitCollection).getRed(&r0, green: &g0, blue: &b0, alpha: &a0)
+        XCTAssertEqual(b, b0, accuracy: 0.01, "pressed shift stays blue, not white")
+    }
+}

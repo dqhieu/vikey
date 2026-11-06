@@ -424,6 +424,13 @@ final class KeyboardView: UIView {
         }
     }
 
+    /// The Paste key's colour while there is text to paste.
+    static let pasteTint: UIColor = .systemOrange
+    /// A pressed key keeps its colour at half the opacity (Hieu: not a white flash on blue shift or red delete).
+    static func pressed(_ c: UIColor) -> UIColor { c.withAlphaComponent(c.cgColor.alpha * 0.5) }
+    /// The pasteboard has text: the Paste key is tinted (set by the controller).
+    var pasteReady = false { didSet { if pasteReady != oldValue { refreshColors() } } }
+
     private func refreshColors() {
         bar.dark = dark
         mark.dark = dark
@@ -431,28 +438,31 @@ final class KeyboardView: UIView {
         // the system keys over the keyboard's glass, measured: light (253,255,255) on (217,221,233) ≈ 95% white,
         // dark (61,61,67) on (23,24,31) ≈ 16.5% white (Tony: ours were too transparent)
         var key: UIColor = dark ? UIColor(white: 1, alpha: 0.165) : UIColor(red: 0.992, green: 1, blue: 1, alpha: 0.99)
-        var pressed: UIColor = dark ? UIColor(white: 1, alpha: 0.32) : UIColor(white: 1, alpha: 0.55)
-        if KeyCap.glassOn {   // glass keys: a light white tint so the glass shows through (more hides it); pressed lights up
+        if KeyCap.glassOn {   // glass keys: a light white tint so the glass shows through (more hides it)
             key = UIColor(white: 1, alpha: dark ? 0.12 : 0.2)
-            pressed = UIColor(white: 1, alpha: dark ? 0.35 : 0.7)
         }
+        let brand = dark ? UIColor(red: 0.62, green: 0.60, blue: 1, alpha: 1) : UIColor(red: 0.31, green: 0.27, blue: 0.90, alpha: 1)
         for (def, v) in keys {
             var bg = key, tint = fg
             if def.kind == .shift { bg = .systemBlue; tint = .white }   // always blue, like a blue Return (Hieu)
+            if def.kind == .backspace { bg = .systemRed; tint = .white }   // always red (Hieu)
+            if def.kind == .paste && pasteReady { bg = Self.pasteTint; tint = .white }   // something to paste (Hieu)
             if def.kind == .returnKey && returnIsBlue { bg = .systemBlue; tint = .white }
             if def.kind == .returnKey && returnIsDone { bg = .systemGreen; tint = .white }
-            if def.kind == .language && langTop && languageShort == "VI" {   // tinted in Vietnamese, neutral in English
-                bg = dark ? UIColor(red: 0.42, green: 0.40, blue: 1, alpha: 0.30) : UIColor(red: 0.31, green: 0.27, blue: 0.90, alpha: 0.14)
-            }
             if def.kind == .language && langTop && Self.markOn {   // the corner element draws it (LangMark.swift), the key stays a tap area
                 v.normalColor = .clear; v.pressedColor = .clear
                 v.fill = .clear
                 continue
             }
-            if def.kind == .language { tint = dark ? UIColor(red: 0.62, green: 0.60, blue: 1, alpha: 1) : UIColor(red: 0.31, green: 0.27, blue: 0.90, alpha: 1) }
+            if def.kind == .language {   // Vietnamese: indigo with a white VI; English: the plain key, indigo EN (Hieu)
+                if languageShort == "VI" {
+                    bg = dark ? UIColor(red: 0.42, green: 0.40, blue: 1, alpha: 1) : UIColor(red: 0.31, green: 0.27, blue: 0.90, alpha: 1)
+                    tint = .white
+                } else { tint = brand }
+            }
             if cursorMode { bg = dark ? UIColor(white: 0.32, alpha: 1) : UIColor(white: 0.93, alpha: 1) }
             v.normalColor = bg
-            v.pressedColor = pressed
+            v.pressedColor = Self.pressed(bg)
             if v !== touchKey { v.fill = bg }
             if v.label.textColor != tint { v.label.textColor = tint; v.icon.tintColor = tint }
         }

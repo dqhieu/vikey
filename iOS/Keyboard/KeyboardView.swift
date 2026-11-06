@@ -673,7 +673,7 @@ final class KeyCap: UIView {
     var pressedColor: UIColor = .lightGray
     /// Every key is a piece of Liquid Glass on iOS 26 and later (Hieu); before that, a solid key.
     static var glassOn: Bool { if #available(iOS 26.0, *) { return true } else { return false } }
-    static let cornerRadius: CGFloat = 8.5
+    static let cornerRadius: CGFloat = 12   // Hieu; the system keyboard's are 8.5
     /// The key's colour: the glass's tint, or the background without glass. Clear = no key drawn (a tap area only).
     var fill: UIColor = .white {
         didSet {
@@ -773,7 +773,7 @@ final class KeyPopup: UIView {
         frame = all
         let b = bubble.offsetBy(dx: -all.minX, dy: -all.minY), kk = k.offsetBy(dx: -all.minX, dy: -all.minY)
         let path = UIBezierPath()
-        let r: CGFloat = 10, rk: CGFloat = 8.5, neck = kk.minY + 4
+        let r: CGFloat = 10, rk = KeyCap.cornerRadius, neck = kk.minY + 4
         path.move(to: CGPoint(x: b.minX + r, y: b.minY))
         path.addLine(to: CGPoint(x: b.maxX - r, y: b.minY))
         path.addQuadCurve(to: CGPoint(x: b.maxX, y: b.minY + r), controlPoint: CGPoint(x: b.maxX, y: b.minY))

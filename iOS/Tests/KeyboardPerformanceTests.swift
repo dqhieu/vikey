@@ -235,6 +235,8 @@ final class KeyboardPerformanceTests: XCTestCase {
         kb.layoutIfNeeded()
         let caps = kb.subviews.compactMap { $0 as? KeyCap }
         XCTAssertGreaterThan(caps.count, 30)
-        for c in caps { c.layoutIfNeeded(); XCTAssertNotNil(c.layer.shadowPath, "a key shadow without a path is re-rendered offscreen every frame") }
+        for c in caps where c.layer.shadowOpacity > 0 {   // glass keys (iOS 26+) draw no shadow
+            c.layoutIfNeeded(); XCTAssertNotNil(c.layer.shadowPath, "a key shadow without a path is re-rendered offscreen every frame")
+        }
     }
 }

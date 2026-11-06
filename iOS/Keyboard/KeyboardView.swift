@@ -134,6 +134,8 @@ final class KeyboardView: UIView {
     /// Keys are 48 pt tall on Pro Max-size iPhones (430-440 pt wide), 46 below that (Hieu); the iOS 26.5 system
     /// keyboard's are 45 / 43. Rows are 6 pt apart, the same as the keys side by side (Hieu).
     static let rowGap: CGFloat = 6
+    /// Below this the space bar's language name ("Tiếng Việt", "English") would be cut off, so it shows none.
+    static let spaceLabelMinWidth: CGFloat = 80
     static var portraitWidth: CGFloat { min(UIScreen.main.bounds.width, UIScreen.main.bounds.height) }
     static var tallKeys: Bool { portraitWidth >= 428 }
     static func metrics(compactHeight: Bool) -> (top: CGFloat, keyH: CGFloat, pitch: CGFloat, bottom: CGFloat) {
@@ -166,10 +168,11 @@ final class KeyboardView: UIView {
 
     private func rowKinds() -> [[KeyKind]] {
         func chars(_ s: String) -> [KeyKind] { s.map { .char(String($0)) } }
-        // the system's email, URL, web search and Twitter layouts have no emoji key: room for @ . / .com and the space bar
-        // (Paste sits where the system keyboard has emoji, so those layouts go without it too)
+        // the system's email, URL, web search and Twitter layouts have no emoji key: room for @ . / .com and the space bar.
+        // Paste stays there too (Hieu: pasting a link into Safari's address bar), except next to a globe key, where
+        // the space bar would have no room left
         let special = layer_ == .letters && [.emailAddress, .URL, .webSearch, .twitter].contains(fieldType)
-        var bottom: [KeyKind] = [layer_ == .letters ? .layer(.numbers) : .layer(.letters)] + (special ? [] : [.paste])
+        var bottom: [KeyKind] = [layer_ == .letters ? .layer(.numbers) : .layer(.letters)] + (special && showsGlobe ? [] : [.paste])
         bottom.append(.language)   // VI/EN right after Paste
         if showsGlobe { bottom.append(.globe) }
         switch (layer_, fieldType) {   // like the system keyboard's email, URL, web search and Twitter layouts
@@ -315,7 +318,7 @@ final class KeyboardView: UIView {
             // (a key-coloured square showed behind the pill in dark mode, Tony, build 51)
             if let v = keys.first(where: { $0.def.kind == .language })?.view {
                 v.normalColor = .clear; v.pressedColor = .clear; v.layer.shadowOpacity = 0
-                if v.backgroundColor != .clear { v.backgroundColor = .clear }
+                v.fill = .clear
             }
             mark.frame = CGRect(x: side, y: dh + side, width: W - 2 * side, height: Self.pillH)
             mark.pillWidth = langTopWidth
@@ -326,6 +329,8 @@ final class KeyboardView: UIView {
         for i in keys.indices where i < frames.count {
             keys[i].def.frame = frames[i]
             keys[i].view.frame = frames[i]
+            // a narrow space bar (email and Twitter fields, with Paste) shows no "Tiếng…": a blank bar reads better (Hieu)
+            if keys[i].def.kind == .space { keys[i].view.label.isHidden = frames[i].width < Self.spaceLabelMinWidth }
             if keys[i].def.kind == .globe { globeButton?.frame = frames[i].insetBy(dx: -gap / 2, dy: -6) }
             if layer_ == .letters, case .char(let c) = keys[i].def.kind, let ch = c.first, let a = ch.asciiValue, ch.isLetter {
                 let f = frames[i]
@@ -425,8 +430,12 @@ final class KeyboardView: UIView {
         let fg: UIColor = dark ? .white : .black
         // the system keys over the keyboard's glass, measured: light (253,255,255) on (217,221,233) ≈ 95% white,
         // dark (61,61,67) on (23,24,31) ≈ 16.5% white (Tony: ours were too transparent)
-        let key: UIColor = dark ? UIColor(white: 1, alpha: 0.165) : UIColor(red: 0.992, green: 1, blue: 1, alpha: 0.99)
-        let pressed: UIColor = dark ? UIColor(white: 1, alpha: 0.32) : UIColor(white: 1, alpha: 0.55)
+        var key: UIColor = dark ? UIColor(white: 1, alpha: 0.165) : UIColor(red: 0.992, green: 1, blue: 1, alpha: 0.99)
+        var pressed: UIColor = dark ? UIColor(white: 1, alpha: 0.32) : UIColor(white: 1, alpha: 0.55)
+        if KeyCap.glassOn {   // glass keys: a light white tint so the glass shows through (more hides it); pressed lights up
+            key = UIColor(white: 1, alpha: dark ? 0.12 : 0.2)
+            pressed = UIColor(white: 1, alpha: dark ? 0.35 : 0.7)
+        }
         for (def, v) in keys {
             var bg = key, tint = fg
             if def.kind == .returnKey && returnIsBlue { bg = .systemBlue; tint = .white }
@@ -436,14 +445,14 @@ final class KeyboardView: UIView {
             }
             if def.kind == .language && langTop && Self.markOn {   // the corner element draws it (LangMark.swift), the key stays a tap area
                 v.normalColor = .clear; v.pressedColor = .clear
-                if v.backgroundColor != .clear { v.backgroundColor = .clear }
+                v.fill = .clear
                 continue
             }
             if def.kind == .language { tint = dark ? UIColor(red: 0.62, green: 0.60, blue: 1, alpha: 1) : UIColor(red: 0.31, green: 0.27, blue: 0.90, alpha: 1) }
             if cursorMode { bg = dark ? UIColor(white: 0.32, alpha: 1) : UIColor(white: 0.93, alpha: 1) }
             v.normalColor = bg
             v.pressedColor = pressed
-            if v !== touchKey && v.backgroundColor != bg { v.backgroundColor = bg }
+            if v !== touchKey { v.fill = bg }
             if v.label.textColor != tint { v.label.textColor = tint; v.icon.tintColor = tint }
         }
         popup.dark = dark
@@ -481,12 +490,12 @@ final class KeyboardView: UIView {
     /// `late`: the touch reached us long after the finger landed (the keyboard was busy). Its vibration is
     /// skipped, or a backlog of touches would buzz two or three times in a row.
     private func press(_ c: KeyCap, late: Bool = false) {
-        c.backgroundColor = c.pressedColor
+        c.fill = c.pressedColor
         if Self.markOn && langTop, keys.first(where: { $0.view === c })?.def.kind == .language { mark.pressed() }
         if late { Diag.late += 1; return }
         if haptics { tick() } else { UIDevice.current.playInputClick() }
     }
-    private func release(_ c: KeyCap) { c.backgroundColor = c.normalColor }
+    private func release(_ c: KeyCap) { c.fill = c.normalColor }
 
     /// Taps right after the keys come back (the proofread preview closed) are the second half of a double tap.
     func ignoreTouches(for seconds: Double) { quietUntil = CACurrentMediaTime() + seconds }
@@ -527,7 +536,7 @@ final class KeyboardView: UIView {
                 // the system keyboard switches on touch-down and lets you slide onto a symbol
                 delegate?.keyboard(self, didTap: k)
                 slideFromLayer = true
-                if let nc = cap(at: p) { touchKey = nc; nc.backgroundColor = nc.pressedColor }
+                if let nc = cap(at: p) { touchKey = nc; nc.fill = nc.pressedColor }
             default: break
             }
         }
@@ -550,7 +559,7 @@ final class KeyboardView: UIView {
               let nk = kind(of: c), nk != .globe, nk != .backspace, nk != .shift else { return }
         release(current)
         touchKey = c
-        c.backgroundColor = c.pressedColor
+        c.fill = c.pressedColor
         holdTimer?.invalidate()
         if case .char = nk, traitCollection.horizontalSizeClass == .compact { popup.show(over: c, in: self) } else { popup.isHidden = true }
         if case .char = nk { startHold(after: 0.45) { [weak self] in self?.showAlternates(for: c) } }
@@ -658,25 +667,58 @@ final class KeyCap: UIView {
     let icon = UIImageView()
     var normalColor: UIColor = .white
     var pressedColor: UIColor = .lightGray
+    /// Every key is a piece of Liquid Glass on iOS 26 and later (Hieu); before that, a solid key.
+    static var glassOn: Bool { if #available(iOS 26.0, *) { return true } else { return false } }
+    static let cornerRadius: CGFloat = 8.5
+    /// The key's colour: the glass's tint, or the background without glass. Clear = no key drawn (a tap area only).
+    var fill: UIColor = .white {
+        didSet {
+            guard fill != oldValue else { return }
+            if let glass { tintGlass(glass) } else { backgroundColor = fill }
+        }
+    }
+    private let glass: UIVisualEffectView?
     override init(frame: CGRect) {
+        glass = Self.glassOn ? UIVisualEffectView() : nil
         super.init(frame: frame)
-        layer.cornerRadius = 8.5
+        layer.cornerRadius = Self.cornerRadius
         layer.cornerCurve = .continuous
-        layer.shadowColor = UIColor.black.cgColor
-        layer.shadowOpacity = 0.10   // light: the keys are translucent
-        layer.shadowRadius = 0
-        layer.shadowOffset = CGSize(width: 0, height: 1)
+        if let glass {
+            glass.isUserInteractionEnabled = false   // the keyboard view takes every touch
+            glass.layer.cornerRadius = Self.cornerRadius
+            glass.layer.cornerCurve = .continuous
+            glass.clipsToBounds = true
+            addSubview(glass)
+            tintGlass(glass)
+        } else {
+            layer.shadowColor = UIColor.black.cgColor
+            layer.shadowOpacity = 0.10   // light: the keys are translucent
+            layer.shadowRadius = 0
+            layer.shadowOffset = CGSize(width: 0, height: 1)
+            backgroundColor = fill
+        }
         label.textAlignment = .center
         icon.contentMode = .center
         addSubview(label); addSubview(icon)
     }
     required init?(coder: NSCoder) { fatalError() }
+    private func tintGlass(_ v: UIVisualEffectView) {
+        guard #available(iOS 26.0, *) else { return }
+        var a: CGFloat = 0
+        fill.getWhite(nil, alpha: &a)
+        v.isHidden = a == 0
+        guard a > 0 else { return }
+        let e = UIGlassEffect(style: .regular)
+        e.tintColor = fill
+        v.effect = e
+    }
     override func layoutSubviews() {
         super.layoutSubviews()
+        glass?.frame = bounds
         label.frame = bounds.insetBy(dx: 2, dy: 0).offsetBy(dx: 0, dy: -1)
         icon.frame = bounds
         // an explicit shadow path: without it every key's shadow is rendered offscreen on each frame
-        layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: layer.cornerRadius).cgPath
+        if glass == nil { layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: layer.cornerRadius).cgPath }
     }
 }
 

@@ -16,7 +16,7 @@ final class KeyboardLayoutTests: XCTestCase {
     }
     private func titles(_ kb: KeyboardView) -> [String] { kb.subviews.compactMap { ($0 as? KeyCap)?.label.text } }
 
-    /// Paste takes the emoji key's place in the bottom row; layouts that had no emoji key get no Paste key either.
+    /// Paste takes the emoji key's place in the bottom row, and is in email, URL, web search and Twitter fields too.
     func testPasteReplacesEmoji() {
         func caps(_ kb: KeyboardView, symbol: String) -> [KeyCap] {   // a symbol image's description names it
             kb.subviews.compactMap { $0 as? KeyCap }.filter { $0.icon.image?.description.contains("system: \(symbol)") == true }
@@ -28,7 +28,27 @@ final class KeyboardLayoutTests: XCTestCase {
             XCTAssertGreaterThan(paste.first?.frame.minY ?? 0, 150, "\(layer): in the bottom row")
             XCTAssertTrue(caps(kb, symbol: "face.smiling").isEmpty, "\(layer): no emoji key")
         }
-        XCTAssertTrue(caps(render(.emailAddress, "paste_email"), symbol: "clipboard").isEmpty, "email: @ and . instead")
+        // email, URL, web search (Safari's address bar) and Twitter fields keep Paste, with a usable space bar
+        for (type, name) in [(UIKeyboardType.emailAddress, "email"), (.URL, "url"), (.webSearch, "websearch"), (.twitter, "twitter")] {
+            let kb = render(type, "paste_\(name)")
+            XCTAssertEqual(caps(kb, symbol: "clipboard").count, 1, "\(name): one Paste key")
+            if let space = kb.subviews.compactMap({ $0 as? KeyCap }).first(where: { $0.label.text == kb.languageTitle }) {
+                XCTAssertGreaterThanOrEqual(space.frame.width, 40, "\(name): the space bar still fits")
+                // too narrow for "Tiếng Việt" (email, Twitter): a blank bar, not a cut-off name
+                XCTAssertEqual(space.label.isHidden, space.frame.width < KeyboardView.spaceLabelMinWidth, "\(name): space label")
+            } else if type != .URL { XCTFail("\(name): a space bar") }
+        }
+        let plain = render(.default, "paste_default_space")
+        XCTAssertEqual(plain.subviews.compactMap { $0 as? KeyCap }.first { $0.label.text == plain.languageTitle }?.label.isHidden, false,
+                       "the normal space bar keeps its label")
+        let mail = render(.emailAddress, "paste_email_space")
+        XCTAssertEqual(mail.subviews.compactMap { $0 as? KeyCap }.first { $0.label.text == mail.languageTitle }?.label.isHidden, true,
+                       "email: the narrow space bar shows no label")
+        // next to a globe key (Touch ID iPhones) there is no room: those fields go without Paste
+        let kb = KeyboardView(frame: CGRect(x: 0, y: 0, width: 375, height: KeyboardView.keyboardHeight(compactHeight: false)))
+        kb.showsGlobe = true; kb.fieldType = .emailAddress
+        kb.layoutIfNeeded()
+        XCTAssertTrue(caps(kb, symbol: "clipboard").isEmpty, "email with a globe key: no Paste")
     }
 
     /// VI/EN sits in the bottom row right after Paste, with the suggestion strip on or off.
@@ -184,7 +204,7 @@ final class CornerKeyInvisibleTests: XCTestCase {
         kb.setNeedsLayout(); kb.layoutIfNeeded()
         let cap = kb.subviews.compactMap { $0 as? KeyCap }.first { $0.frame.minY < 40 && $0.frame.minX < 20 }
         XCTAssertNotNil(cap)
-        XCTAssertEqual(cap?.backgroundColor, .clear)
+        XCTAssertEqual(cap?.fill, .clear)
         XCTAssertEqual(cap?.normalColor, .clear)
     }
 }

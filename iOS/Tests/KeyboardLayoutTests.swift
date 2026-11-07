@@ -307,6 +307,18 @@ final class KeyTintTests: XCTestCase {
         XCTAssertEqual(symbol(kb, "clipboard")?.fill, plain)
     }
 
+    func testPasteKeyBecomesSparklesOverASelection() {
+        let kb = make(dark: false)
+        kb.pasteReady = true
+        kb.sparkles = true
+        XCTAssertNil(symbol(kb, "clipboard"))
+        XCTAssertNotNil(symbol(kb, "sparkles"), "✨ in Paste's place")
+        XCTAssertNotEqual(symbol(kb, "sparkles")?.fill, KeyboardView.pasteTint, "indigo, not the paste orange")
+        XCTAssertEqual(symbol(kb, "sparkles")?.icon.tintColor, .white)
+        kb.sparkles = false
+        XCTAssertEqual(symbol(kb, "clipboard")?.fill, KeyboardView.pasteTint)
+    }
+
     func testPressedKeepsTheColourAtHalfOpacity() {
         let kb = make(dark: false)
         for cap in [symbol(kb, "shift"), symbol(kb, "delete.left"), caps(kb).first { $0.label.text == "Q" || $0.label.text == "q" }] {

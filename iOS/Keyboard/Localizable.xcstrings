@@ -1,6 +1,102 @@
 {
  "sourceLanguage": "vi",
  "strings": {
+  "Chuyên nghiệp" : {
+   "localizations" : {
+    "en" : {
+     "stringUnit" : {
+      "state" : "translated",
+      "value" : "Professional"
+     }
+    },
+    "vi" : {
+     "stringUnit" : {
+      "state" : "translated",
+      "value" : "Chuyên nghiệp"
+     }
+    }
+   }
+  },
+  "Không viết được" : {
+   "localizations" : {
+    "en" : {
+     "stringUnit" : {
+      "state" : "translated",
+      "value" : "Couldn't rewrite"
+     }
+    },
+    "vi" : {
+     "stringUnit" : {
+      "state" : "translated",
+      "value" : "Không viết được"
+     }
+    }
+   }
+  },
+  "Ngắn gọn" : {
+   "localizations" : {
+    "en" : {
+     "stringUnit" : {
+      "state" : "translated",
+      "value" : "Concise"
+     }
+    },
+    "vi" : {
+     "stringUnit" : {
+      "state" : "translated",
+      "value" : "Ngắn gọn"
+     }
+    }
+   }
+  },
+  "Thân thiện" : {
+   "localizations" : {
+    "en" : {
+     "stringUnit" : {
+      "state" : "translated",
+      "value" : "Friendly"
+     }
+    },
+    "vi" : {
+     "stringUnit" : {
+      "state" : "translated",
+      "value" : "Thân thiện"
+     }
+    }
+   }
+  },
+  "Viết lại" : {
+   "localizations" : {
+    "en" : {
+     "stringUnit" : {
+      "state" : "translated",
+      "value" : "Rewrite"
+     }
+    },
+    "vi" : {
+     "stringUnit" : {
+      "state" : "translated",
+      "value" : "Viết lại"
+     }
+    }
+   }
+  },
+  "Đang viết…" : {
+   "localizations" : {
+    "en" : {
+     "stringUnit" : {
+      "state" : "translated",
+      "value" : "Writing…"
+     }
+    },
+    "vi" : {
+     "stringUnit" : {
+      "state" : "translated",
+      "value" : "Đang viết…"
+     }
+    }
+   }
+  },
   "Hãy chọn trong một đoạn" : {
    "localizations" : {
     "en" : {

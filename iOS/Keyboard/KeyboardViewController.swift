@@ -22,6 +22,7 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
         case word(String, Check)                  // one word selected: its fix
         case text(String, Check)                  // several words: ✨ Proofread, then the preview
         case preview(original: String, corrected: String)
+        case rewrite(original: String, drafts: [RewritePanel.Draft])   // the ✨ key: one rewrite per style
         case applied(original: String, inserted: String, after: String)   // Undo, while the fix is still right there
     }
     enum Check: Equatable { case ready, working, fixes([String]), noMistakes, failed, tooLong, onePara }
@@ -30,9 +31,10 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
     private var aiSelTask: Task<Void, Never>?
     private var aiNext: [String] = [], aiNextFor = ""
     private var aiNextTask: Task<Void, Never>?
-    private var selection: String?
+    private var selection: String? { didSet { if selection != oldValue { updateSparkles() } } }
     private var selectionAt = ""            // the text just before it: the same word elsewhere is another selection
     private var proofreadPanel: ProofreadPanel?
+    private var rewritePanel: RewritePanel?
     /// Longer selections aren't offered: the model's window is small, and the app may hand over only part of them.
     static let proofreadLimit = 1500
     /// Wait before checking a selected word (handles may still be moving); tests set 0.
@@ -41,6 +43,7 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
     private var textReplacements: [String: String] = [:]
     func setTextReplacementsForTests(_ r: [String: String]) { textReplacements = r }
     var proofreadPanelForTests: ProofreadPanel? { proofreadPanel }
+    var rewritePanelForTests: RewritePanel? { rewritePanel }
     var aiStateForTests: AIState { aiState }
     private var emojiQuery = ""
     /// Our own copy of the text before the cursor, kept up to date from our edits. Asking the app for it
@@ -275,6 +278,7 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
         keyboard.returnIsBlue = blue
         emojiView?.dark = keyboard.dark
         proofreadPanel?.dark = keyboard.dark
+        rewritePanel?.dark = keyboard.dark
         if emojiView?.searching == true { updateEmojiQuery() }   // VI/EN changes how the query reads
     }
 
@@ -439,7 +443,7 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
         case .globe:
             advanceToNextInputMode()
         case .paste:
-            paste()
+            if keyboard.sparkles { startRewrite() } else { paste() }
         case .emoji:
             showEmoji()
         }
@@ -936,11 +940,19 @@ extension KeyboardViewController {
         aiSelTask?.cancel(); aiSelTask = nil
         aiState = new
         if case .preview(let o, let c) = new { showPreview(original: o, corrected: c) } else if proofreadPanel != nil { closePreview() }
+        if case .rewrite(_, let d) = new { showRewrite(d) } else if rewritePanel != nil { closeRewrite() }
         scheduleSuggestions()
+    }
+
+    /// The Paste key is ✨ while there's selected text to rewrite.
+    private func updateSparkles() {
+        guard let kb = keyboard else { return }
+        kb.sparkles = selection.map { s in AIAssist.available && correctsHere && s.contains(where: { $0.isLetter }) } ?? false
     }
 
     /// The selection changed (or went away): start over from it.
     private func selectionChanged() {
+        updateSparkles()       // Apple Intelligence may have come up since the selection was made
         guard let sel = selection, AIAssist.available, KeyboardView.barOn, correctsHere else {
             // no selection: only Undo survives, and only while the fix is still right there
             if case .applied = aiState, undoStillFits() { return }
@@ -948,6 +960,7 @@ extension KeyboardViewController {
             return
         }
         if case .preview(let o, _) = aiState, o == sel { return }       // the same text, still being looked at
+        if case .rewrite(let o, _) = aiState, o == sel { return }
         let core = sel.trimmingCharacters(in: .whitespacesAndNewlines)
         guard core.contains(where: { $0.isLetter }) else { setAI(.none); return }   // only emoji, digits or punctuation
         if !core.contains(where: { $0.isWhitespace }) && core.count <= 40 {
@@ -984,7 +997,7 @@ extension KeyboardViewController {
             case .onePara: keyboard.suggestions = note(String(localized: "Hãy chọn trong một đoạn"))
             }
             return true
-        case .preview:
+        case .preview, .rewrite:
             keyboard.suggestions = []
             return true
         case .applied(_, let ins, _):
@@ -1071,7 +1084,11 @@ extension KeyboardViewController {
     }
 
     /// The same state with a new answer, without starting over (no new generation: nothing else is in flight).
-    private func update(_ s: AIState) { aiState = s; scheduleSuggestions() }
+    private func update(_ s: AIState) {
+        aiState = s
+        if case .rewrite(_, let d) = s { rewritePanel?.show(d) }
+        scheduleSuggestions()
+    }
 
     private func startProofread() {
         guard case .text(let original, .ready) = aiState else { return }
@@ -1149,5 +1166,68 @@ extension KeyboardViewController {
         proofreadPanel?.removeFromSuperview(); proofreadPanel = nil
         keyboard.isHidden = false
         keyboard.ignoreTouches(for: 0.8)      // a double tap on Apply must not land on Return
+    }
+
+    // MARK: ✨ rewrite
+
+    /// The ✨ key: the selection rewritten in each style, one after the other (the first card fills in soonest).
+    private func startRewrite() {
+        guard let sel = selection, AIAssist.available else { return }
+        let core = sel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard core.contains(where: { $0.isLetter }) else { return }
+        // the same limits as proofreading, and the strip says why
+        let risky = core.contains("\n") || core.contains("\r") || core.contains("  ")
+        if risky || sel.count > Self.proofreadLimit { setAI(.text(sel, risky ? .onePara : .tooLong)); return }
+        let styles = AIAssist.Style.allCases
+        setAI(.rewrite(original: sel, drafts: Array(repeating: .working, count: styles.count)))
+        let gen = aiGen
+        aiSelTask = Task { [weak self] in
+            for style in styles {
+                let r = await AIAssist.withTimeout(20) { await AIAssist.rewrite(sel, style: style) } ?? nil
+                let goOn: Bool = await MainActor.run {
+                    guard let self, self.aiGen == gen, !Task.isCancelled,
+                          case .rewrite(let o, var d) = self.aiState, style.rawValue < d.count else { return false }
+                    d[style.rawValue] = r.map { RewritePanel.Draft.done($0) } ?? .failed
+                    self.update(.rewrite(original: o, drafts: d))
+                    return true
+                }
+                if !goOn { return }
+            }
+        }
+    }
+
+    /// A card: its rewrite replaces the selection, if that's still what's selected. Undo follows in the strip.
+    private func applyRewrite(_ i: Int) {
+        guard case .rewrite(let original, let drafts) = aiState, i < drafts.count, case .done(let text) = drafts[i] else { return }
+        guard proxy.selectedText == original else { setAI(.none); selection = nil; readSelection(); return }
+        let before = proxy.documentContextBeforeInput ?? "", after = proxy.documentContextAfterInput ?? ""
+        proxy.insertText(text)
+        afterReplace(original: original, inserted: text, before: before, after: after)
+    }
+
+    /// Cancel: the keys again, with the strip as it is for the selection (its fix or ✨ Proofread).
+    private func cancelRewrite() {
+        setAI(.none)
+        selectionChanged()
+    }
+
+    private func showRewrite(_ drafts: [RewritePanel.Draft]) {
+        let panel = rewritePanel ?? RewritePanel(styles: AIAssist.Style.allCases.map(\.title))
+        panel.dark = keyboard.dark
+        panel.show(drafts)
+        panel.onPick = { [weak self] i in self?.applyRewrite(i) }
+        panel.onCancel = { [weak self] in self?.cancelRewrite() }
+        if rewritePanel == nil {
+            panel.frame = view.bounds
+            panel.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            view.addSubview(panel); rewritePanel = panel
+        }
+        keyboard.isHidden = true
+    }
+
+    private func closeRewrite() {
+        rewritePanel?.removeFromSuperview(); rewritePanel = nil
+        keyboard.isHidden = false
+        keyboard.ignoreTouches(for: 0.8)      // a double tap on a card must not land on a key
     }
 }

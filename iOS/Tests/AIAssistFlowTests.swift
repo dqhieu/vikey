@@ -381,4 +381,112 @@ final class AIAssistFlowTests: XCTestCase {
         XCTAssertNil(kv.capForTests(at: CGPoint(x: 100, y: 20)), "the strip is not the Q-row")
         XCTAssertNotNil(kv.capForTests(at: CGPoint(x: 100, y: kv.bounds.height - 30)))
     }
+
+    // ✨ rewrite: the Paste key turns into ✨ over a selection; three styles, a tap puts one in
+    private static let styled: (String, AIAssist.Style) -> String? = { _, style in
+        switch style {
+        case .friendly: return "Could you send me the file? Thanks a lot!"
+        case .professional: return "Could you please send me the file?"
+        case .concise: return "Send me the file?"
+        }
+    }
+
+    func testSparklesKeyOnlyWhileTextIsSelected() {
+        AIAssist.stub = .init(rewrite: Self.styled)
+        let (vc, p) = make()
+        p.text = "can u send me the file"; p.cursor = 0
+        XCTAssertFalse(vc.keyboardViewForTests.sparkles, "no selection: Paste")
+        select(p, vc, p.text)
+        XCTAssertTrue(vc.keyboardViewForTests.sparkles)
+        p.selection = 0; p.cursor = 3
+        vc.selectionDidChange(nil)
+        XCTAssertFalse(vc.keyboardViewForTests.sparkles, "back to Paste")
+    }
+
+    func testRewriteOffersThreeStylesAndATapReplacesTheSelection() {
+        AIAssist.stub = .init(rewrite: Self.styled)
+        let (vc, p) = make()
+        p.text = "can u send me the file"; p.cursor = 0
+        select(p, vc, p.text)
+        vc.keyboard(sender, didTap: .paste)
+        settle { vc.rewritePanelForTests?.text(at: 2) == "Send me the file?" }
+        XCTAssertEqual(vc.rewritePanelForTests?.text(at: 0), "Could you send me the file? Thanks a lot!")
+        XCTAssertEqual(vc.rewritePanelForTests?.text(at: 1), "Could you please send me the file?")
+        XCTAssertEqual(p.text, "can u send me the file", "nothing changes before a tap")
+        vc.rewritePanelForTests?.onPick?(1)
+        XCTAssertEqual(p.text, "Could you please send me the file?")
+        XCTAssertNil(vc.rewritePanelForTests)
+        settle { self.strip(vc).first?.kind == .undo }
+        vc.keyboard(sender, pickSuggestion: 0)
+        XCTAssertEqual(p.text, "can u send me the file")
+    }
+
+    func testRewriteCancelKeepsTheTextAndTheSelectionStrip() {
+        AIAssist.stub = .init(rewrite: Self.styled)
+        let (vc, p) = make()
+        p.text = "can u send me the file"; p.cursor = 0
+        select(p, vc, p.text)
+        vc.keyboard(sender, didTap: .paste)
+        settle { vc.rewritePanelForTests != nil }
+        XCTAssertTrue(vc.keyboardViewForTests.isHidden, "the cards cover the keys")
+        vc.rewritePanelForTests?.onCancel?()
+        XCTAssertNil(vc.rewritePanelForTests)
+        XCTAssertFalse(vc.keyboardViewForTests.isHidden)
+        XCTAssertEqual(p.text, "can u send me the file")
+        settle { self.strip(vc).first?.kind == .proofread }
+        XCTAssertEqual(strip(vc).map(\.kind), [.proofread])
+    }
+
+    func testAFailedStyleSaysSoAndCantBePicked() {
+        AIAssist.stub = .init(rewrite: { t, s in s == .concise ? nil : Self.styled(t, s) })
+        let (vc, p) = make()
+        p.text = "can u send me the file"; p.cursor = 0
+        select(p, vc, p.text)
+        vc.keyboard(sender, didTap: .paste)
+        settle { vc.rewritePanelForTests?.text(at: 2) == String(localized: "Không viết được") }
+        XCTAssertEqual(vc.rewritePanelForTests?.text(at: 2), String(localized: "Không viết được"))
+        vc.rewritePanelForTests?.onPick?(2)
+        XCTAssertEqual(p.text, "can u send me the file")
+        XCTAssertNotNil(vc.rewritePanelForTests, "still open: the other two can be picked")
+    }
+
+    func testRewritePickNeedsTheSameSelection() {
+        AIAssist.stub = .init(rewrite: Self.styled)
+        let (vc, p) = make()
+        p.text = "can u send me the file"; p.cursor = 0
+        select(p, vc, p.text)
+        vc.keyboard(sender, didTap: .paste)
+        settle { vc.rewritePanelForTests?.text(at: 0) == "Could you send me the file? Thanks a lot!" }
+        p.selection = 0; p.cursor = 3            // the user moved away meanwhile
+        vc.rewritePanelForTests?.onPick?(0)
+        XCTAssertEqual(p.text, "can u send me the file", "never replaces the wrong text")
+    }
+
+    func testMultiLineSelectionsAreNotRewritten() {
+        AIAssist.stub = .init(rewrite: Self.styled)
+        let (vc, p) = make()
+        p.text = "line one\nline two"; p.cursor = 0
+        select(p, vc, p.text)
+        vc.keyboard(sender, didTap: .paste)
+        settle()
+        XCTAssertNil(vc.rewritePanelForTests)
+        XCTAssertEqual(p.text, "line one\nline two")
+    }
+
+    func testNoSparklesWithoutAppleIntelligence() {
+        guard !AIAssist.available else { return }
+        let (vc, p) = make()
+        p.text = "some words here"; p.cursor = 0
+        select(p, vc, p.text)
+        XCTAssertFalse(vc.keyboardViewForTests.sparkles, "Paste stays Paste")
+    }
+
+    func testRewriteAnswersAreChecked() {
+        XCTAssertEqual(RewriteCheck.clean("Here is the rewritten text: Could you send it?", original: "can u send it"), "Could you send it?")
+        XCTAssertEqual(RewriteCheck.clean("\"Tôi đi học nhé!\"", original: "toi di hoc nhe"), "Tôi đi học nhé!", "accents added: still Vietnamese")
+        XCTAssertNil(RewriteCheck.clean("Please send me the file.", original: "em gửi anh file nhé"), "translated to English")
+        XCTAssertNil(RewriteCheck.clean("Tôi về nhà rồi", original: "I'm home now"), "translated to Vietnamese")
+        XCTAssertNil(RewriteCheck.clean("Sure! Here are some options:\n1. Hi\n2. Hello", original: "hi there friend"), "a list")
+        XCTAssertNil(RewriteCheck.clean(String(repeating: "Okay, sounds great to me! ", count: 4), original: "ok"), "far too long")
+    }
 }

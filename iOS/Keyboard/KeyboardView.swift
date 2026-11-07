@@ -353,7 +353,7 @@ final class KeyboardView: UIView {
             if returnIsDone { return (nil, UIImage(systemName: "checkmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .semibold))) }
             return returnTitle == "return" ? (nil, UIImage(systemName: "return", withConfiguration: sym)) : (returnTitle, nil)
         case .globe: return (nil, UIImage(systemName: "globe", withConfiguration: sym))
-        case .paste: return (nil, UIImage(systemName: "clipboard", withConfiguration: sym))
+        case .paste: return (nil, UIImage(systemName: sparkles ? "sparkles" : "clipboard", withConfiguration: sym))
         case .emoji: return (nil, UIImage(systemName: "face.smiling", withConfiguration: sym))
         case .language: return (languageShort, nil)
         case .layer(let l): return (l == .letters ? "ABC" : (l == .numbers ? "123" : "#+="), nil)
@@ -430,6 +430,9 @@ final class KeyboardView: UIView {
     static func pressed(_ c: UIColor) -> UIColor { c.withAlphaComponent(c.cgColor.alpha * 0.5) }
     /// The pasteboard has text: the Paste key is tinted (set by the controller).
     var pasteReady = false { didSet { if pasteReady != oldValue { refreshColors() } } }
+    /// Text is selected and Apple Intelligence is here: the Paste key becomes ✨, which rewrites the selection
+    /// (set by the controller).
+    var sparkles = false { didSet { if sparkles != oldValue { refreshLabels() } } }
 
     private func refreshColors() {
         bar.dark = dark
@@ -447,6 +450,10 @@ final class KeyboardView: UIView {
             if def.kind == .shift { bg = .systemBlue; tint = .white }   // always blue, like a blue Return (Hieu)
             if def.kind == .backspace { bg = .systemRed; tint = .white }   // always red (Hieu)
             if def.kind == .paste && pasteReady { bg = Self.pasteTint; tint = .white }   // something to paste (Hieu)
+            if def.kind == .paste && sparkles {   // ✨ rewrite: the brand indigo, like the VI key
+                bg = dark ? UIColor(red: 0.42, green: 0.40, blue: 1, alpha: 1) : UIColor(red: 0.31, green: 0.27, blue: 0.90, alpha: 1)
+                tint = .white
+            }
             if def.kind == .returnKey && returnIsBlue { bg = .systemBlue; tint = .white }
             if def.kind == .returnKey && returnIsDone { bg = .systemGreen; tint = .white }
             if def.kind == .language && langTop && Self.markOn {   // the corner element draws it (LangMark.swift), the key stays a tap area

@@ -5,6 +5,21 @@ Each entry records what was asked, what was decided, and its status. Newest firs
 
 Status values: **Shipped** (in a build Tony has), **Agreed** (decided, not built yet), **Rejected**.
 
+## 60. ✨ Rewrite a selection in three styles (iOS, Apple Intelligence)
+
+**Status:** Built 2026-11-07, not in a build yet. iOS only.
+
+**Asked by Hieu.** "Replace paste key with the ✨ key when text is selected. Tap the ✨ key will trigger the rewrite flow. The rewrite flow will use Apple Intelligence to give 3 suggestions with 3 styles. Tap on each suggestion will replace the selected text."
+
+**Decided.**
+- With text selected (and Apple Intelligence on the phone), the Paste key shows ✨ in the brand indigo. Without a selection it is Paste again. Paste over a selection is given up for this.
+- A tap opens a panel over the keys (like the proofread preview) with one card per style: Thân thiện (friendly), Chuyên nghiệp (professional), Ngắn gọn (concise). The cards fill in one after the other as the on-device model answers ("Đang viết…", or "Không viết được" for a style that failed).
+- A tap on a card replaces the selection, only if that text is still what's selected. Undo follows in the strip, as after a proofread. Cancel puts the keys back with the selection's strip (its fix, or ✨ Proofread).
+- Same limits as proofreading: one paragraph, up to 1,500 characters; the strip says why otherwise. The language stays the language: an answer that loses the Vietnamese accents or translates English is dropped (`RewriteCheck`).
+- "Sửa lỗi" in the strip stays as it was.
+
+**Locked by:** iOS tests (AIAssistFlowTests: ✨ only over a selection, three styles then a tap replaces, Cancel, a failed style, a moved selection, multi-line selections, answer checks; KeyboardLayoutTests: ✨ in Paste's place).
+
 ## 59. ":" and ";" after a space stay where they are (phone keyboards)
 
 **Status:** Shipped 2026-11-02 (Tony changed his mind on the earlier behavior).

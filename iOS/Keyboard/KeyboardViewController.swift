@@ -11,7 +11,7 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
     private let driver = VKDriver()
     private var keyboard: KeyboardView!
     var keyboardViewForTests: KeyboardView { keyboard }
-    func setLanguageForTests(_ l: Int) { driver.language = l; driver.resetContext() }
+    func setLanguageForTests(_ l: Int) { driver.language = l; driver.resetContext(); refresh() }   // the key shows it too
     private var heightConstraint: NSLayoutConstraint?
     private var emojiView: EmojiKeyboardView?
     // ✨ rewrite on a selection (AIAssist): one state, replaced whenever the selection changes, so nothing

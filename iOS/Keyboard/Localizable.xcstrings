@@ -52,6 +52,40 @@
         }
       }
     },
+    "Chỉn chu" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Polished"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chỉn chu"
+          }
+        }
+      }
+    },
+    "Cuốn hút" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Engaging"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cuốn hút"
+          }
+        }
+      }
+    },
     "Đang kiểm tra…" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -171,6 +205,23 @@
         }
       }
     },
+    "Hài hước" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Funny"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hài hước"
+          }
+        }
+      }
+    },
     "Hãy chọn trong một đoạn" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -273,23 +324,6 @@
         }
       }
     },
-    "Ngắn gọn" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Shorter"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ngắn gọn"
-          }
-        }
-      }
-    },
     "Sửa lỗi" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -320,23 +354,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tham gia"
-          }
-        }
-      }
-    },
-    "Thân mật" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Casual"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Thân mật"
           }
         }
       }
@@ -388,23 +405,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tìm"
-          }
-        }
-      }
-    },
-    "Trang trọng" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Formal"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Trang trọng"
           }
         }
       }

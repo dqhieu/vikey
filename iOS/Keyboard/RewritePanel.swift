@@ -7,7 +7,7 @@ enum RewriteVersion: Equatable {
     case failed
 }
 
-/// The ✨ picker, over the whole keyboard: the selection rewritten Casual, Formal and Shorter, one card each in that
+/// The ✨ picker, over the whole keyboard: the selection rewritten Polished, Funny and Engaging, one card each in that
 /// order (no style names on them, Hieu), filling in as each answer comes. A tap on a finished card puts it in place of
 /// the selection; a tap on a failed one asks again; Cancel, top right on the title's line (Hieu), keeps the original.
 /// Nothing changes in the app before a tap.

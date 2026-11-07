@@ -87,12 +87,12 @@ enum AIAssist {
 
 /// The three ✨ styles, in the picker's order (Hieu).
 enum RewriteStyle: Int, CaseIterable {
-    case casual, formal, shorter
+    case polished, funny, engaging
     var title: String {
         switch self {
-        case .casual: return String(localized: "Thân mật")
-        case .formal: return String(localized: "Trang trọng")
-        case .shorter: return String(localized: "Ngắn gọn")
+        case .polished: return String(localized: "Chỉn chu")
+        case .funny: return String(localized: "Hài hước")
+        case .engaging: return String(localized: "Cuốn hút")
         }
     }
 }
@@ -111,9 +111,15 @@ private enum Impl {
     static func rewriteRules(_ style: RewriteStyle, vietnamese: Bool) -> String {
         let how: String
         switch style {
-        case .casual: how = "casual and friendly, the way you would text a friend or a close colleague"
-        case .formal: how = "formal and polite, the way you would write to a manager, a teacher or a customer"
-        case .shorter: how = "shorter: the same message in as few words as possible, keeping every fact, name, number and request"
+        case .polished:
+            how = "polished: the same message in the writer's own tone and voice, with spelling, accents, grammar and " +
+                "punctuation fixed and any unclear wording made clear. Change as little as needed and add no emoji"
+        case .funny:
+            how = "funny and playful: the same message with a light, witty twist (playful wording, a pun or a small joke) " +
+                "that still says the same thing and stays kind, never mean. You may add one to three fitting emoji"
+        case .engaging:
+            how = "catchy, like a social media post or caption: open with a short hook, use short punchy wording, and keep " +
+                "it the same message. You may add one to three fitting emoji. Add hashtags only if the text already has some"
         }
         let lang = vietnamese
             ? "Write it in Vietnamese, with full diacritics. If the text is in another language, translate it into Vietnamese. Vietnamese words typed without accents are Vietnamese: add the accents."
@@ -155,8 +161,8 @@ enum RewriteCheck {
     static func clean(_ raw: String, original: String) -> String? {
         var t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         for m in ["<<<", ">>>"] { t = t.replacingOccurrences(of: m, with: "") }
-        // a chatty lead-in ("Here is the rewritten text:", "Casual version:") the original didn't start with
-        let lead = #"^(sure|okay|ok|here|rewritten|rewrite|casual|formal|shorter|short|version|bản|đây)[^:\n]{0,60}:\s*"#
+        // a chatty lead-in ("Here is the rewritten text:", "Funny version:") the original didn't start with
+        let lead = #"^(sure|okay|ok|here|rewritten|rewrite|polished|funny|catchy|engaging|version|bản|đây)[^:\n]{0,60}:\s*"#
         if let r = t.range(of: lead, options: [.regularExpression, .caseInsensitive]),
            !original.lowercased().hasPrefix(String(t[r]).lowercased()) { t = String(t[r.upperBound...]) }
         t = t.trimmingCharacters(in: .whitespacesAndNewlines)

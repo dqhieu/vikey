@@ -1,8 +1,8 @@
 import XCTest
 import UIKit
 
-/// Next words (the table, Apple Intelligence on top); ✨ on the VI/EN key's place rewrites a selection Casual,
-/// Formal and Shorter in a picker, and a tap on a version puts it in. The model is stubbed: these test the keyboard's
+/// Next words (the table, Apple Intelligence on top); ✨ on the VI/EN key's place rewrites a selection Polished,
+/// Funny and Engaging in a picker, and a tap on a version puts it in. The model is stubbed: these test the keyboard's
 /// flow, not Apple's answers.
 final class AIAssistFlowTests: XCTestCase {
     private let sender = KeyboardView()
@@ -40,7 +40,7 @@ final class AIAssistFlowTests: XCTestCase {
         p.cursor = p.text.distance(from: p.text.startIndex, to: r.lowerBound); p.selection = part.count
         vc.selectionDidChange(nil)
     }
-    /// A stub that answers each style with its name in front: "casual …", "formal …", "shorter …".
+    /// A stub that answers each style with its name in front: "polished …", "funny …", "engaging …".
     private func tagged() -> AIAssist.Stub { .init(rewrite: { t, s, _ in "\(s) \(t)" }) }
 
     // the table
@@ -75,10 +75,10 @@ final class AIAssistFlowTests: XCTestCase {
         XCTAssertNotNil(vc.rewritePanelForTests, "the picker opens at once")
         XCTAssertTrue(vc.keyboardViewForTests.isHidden, "over the whole keyboard")
         settle { self.allIn(vc) }
-        XCTAssertEqual(versions(vc), [.done("casual can u send me the file"), .done("formal can u send me the file"), .done("shorter can u send me the file")])
+        XCTAssertEqual(versions(vc), [.done("polished can u send me the file"), .done("funny can u send me the file"), .done("engaging can u send me the file")])
         XCTAssertEqual(p.text, "can u send me the file", "nothing changes before a tap")
-        vc.rewritePanelForTests?.onPick?(.formal)
-        XCTAssertEqual(p.text, "formal can u send me the file")
+        vc.rewritePanelForTests?.onPick?(.funny)
+        XCTAssertEqual(p.text, "funny can u send me the file")
         XCTAssertNil(vc.rewritePanelForTests)
         XCTAssertFalse(vc.keyboardViewForTests.isHidden)
         settle()
@@ -89,7 +89,7 @@ final class AIAssistFlowTests: XCTestCase {
     func testVersionsFillInOneByOne() {
         let gate = DispatchSemaphore(value: 0)
         AIAssist.stub = .init(rewrite: { t, s, _ in
-            if s == .formal { _ = gate.wait(timeout: .now() + 5) }   // formal comes late
+            if s == .funny { _ = gate.wait(timeout: .now() + 5) }   // funny comes late
             return "\(s) \(t)"
         })
         let (vc, p) = make()
@@ -99,12 +99,12 @@ final class AIAssistFlowTests: XCTestCase {
         tapAI(vc)
         settle { self.versions(vc).first != .loading && self.versions(vc).last != .loading }
         XCTAssertEqual(versions(vc)[1], .loading, "still coming")
-        vc.rewritePanelForTests?.onPick?(.formal)                     // a loading card does nothing
+        vc.rewritePanelForTests?.onPick?(.funny)                     // a loading card does nothing
         XCTAssertEqual(p.text, "see you soon")
         XCTAssertNotNil(vc.rewritePanelForTests)
         gate.signal()
         settle { self.allIn(vc) }
-        XCTAssertEqual(versions(vc)[1], .done("formal see you soon"))
+        XCTAssertEqual(versions(vc)[1], .done("funny see you soon"))
     }
 
     func testCancelKeepsTheTextAndGoesBackToSparkle() {
@@ -124,8 +124,8 @@ final class AIAssistFlowTests: XCTestCase {
     }
 
     func testAFailedVersionSaysSoAndATapAsksAgain() {
-        var shorterWorks = false
-        AIAssist.stub = .init(rewrite: { t, s, _ in s == .shorter && !shorterWorks ? nil : "\(s) \(t)" })
+        var engagingWorks = false
+        AIAssist.stub = .init(rewrite: { t, s, _ in s == .engaging && !engagingWorks ? nil : "\(s) \(t)" })
         let (vc, p) = make()
         p.text = "we was late today"; p.cursor = 0
         select(p, vc, p.text)
@@ -133,16 +133,16 @@ final class AIAssistFlowTests: XCTestCase {
         tapAI(vc)
         settle { self.allIn(vc) }
         XCTAssertEqual(versions(vc)[2], .failed)
-        XCTAssertEqual(versions(vc)[0], .done("casual we was late today"), "the others still come")
-        shorterWorks = true
-        vc.rewritePanelForTests?.onPick?(.shorter)                    // retry
+        XCTAssertEqual(versions(vc)[0], .done("polished we was late today"), "the others still come")
+        engagingWorks = true
+        vc.rewritePanelForTests?.onPick?(.engaging)                    // retry
         settle { self.versions(vc)[2] != .failed && self.versions(vc)[2] != .loading }
-        XCTAssertEqual(versions(vc)[2], .done("shorter we was late today"))
+        XCTAssertEqual(versions(vc)[2], .done("engaging we was late today"))
         XCTAssertEqual(p.text, "we was late today", "a retry doesn't put it in")
     }
 
     func testChattyAnswersAreRejected() {
-        AIAssist.stub = .init(rewrite: { _, s, _ in s == .casual ? "Sure! I'd love to help. What would you like me to write?" : "Hey, the meeting moved to 3pm." })
+        AIAssist.stub = .init(rewrite: { _, s, _ in s == .polished ? "Sure! I'd love to help. What would you like me to write?" : "Hey, the meeting moved to 3pm." })
         let (vc, p) = make()
         p.text = "the meeting is moved to 3pm"; p.cursor = 0
         select(p, vc, p.text)
@@ -156,7 +156,7 @@ final class AIAssistFlowTests: XCTestCase {
     func testRewriteCheck() {
         XCTAssertNil(RewriteCheck.clean("Sure, I'd be happy to help you write an email! Who is it for?", original: "can you help me write an email"))
         XCTAssertNil(RewriteCheck.clean(String(repeating: "a long answer ", count: 40), original: "hi there"))
-        XCTAssertEqual(RewriteCheck.clean("Here is the formal version: I will arrive at 5 pm.", original: "ill be there at 5"), "I will arrive at 5 pm.")
+        XCTAssertEqual(RewriteCheck.clean("Here is the funny version: I will arrive at 5 pm.", original: "ill be there at 5"), "I will arrive at 5 pm.")
         XCTAssertEqual(RewriteCheck.clean("\"Hẹn gặp lại bạn nhé!\"", original: "see you"), "Hẹn gặp lại bạn nhé!")
         XCTAssertEqual(RewriteCheck.clean("<<<\nSee you soon.\n>>>", original: "see ya"), "See you soon.")
     }
@@ -183,7 +183,7 @@ final class AIAssistFlowTests: XCTestCase {
         settle { self.key(vc) == .sparkle }
         tapAI(vc)
         settle { self.allIn(vc) }
-        vc.rewritePanelForTests?.onPick?(.casual)
+        vc.rewritePanelForTests?.onPick?(.polished)
         XCTAssertEqual(p.text, "a  Hello world. \nb", "the spaces around it stay")
     }
 
@@ -215,7 +215,7 @@ final class AIAssistFlowTests: XCTestCase {
         settle { self.key(vc) == .sparkle }
         tapAI(vc)
         settle { self.allIn(vc) }
-        vc.rewritePanelForTests?.onPick?(.casual)
+        vc.rewritePanelForTests?.onPick?(.polished)
         XCTAssertEqual(p.text, "Line one.\nLine two.")
         p.text = String(repeating: "some words here ", count: 200); p.cursor = 0
         select(p, vc, p.text)
@@ -299,7 +299,7 @@ final class AIAssistFlowTests: XCTestCase {
         tapAI(vc)
         settle { self.allIn(vc) }
         p.selection = 0; p.cursor = 3            // the user moved away meanwhile
-        vc.rewritePanelForTests?.onPick?(.casual)
+        vc.rewritePanelForTests?.onPick?(.polished)
         XCTAssertEqual(p.text, "two wrds", "never replaces the wrong text")
     }
 

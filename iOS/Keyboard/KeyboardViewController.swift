@@ -148,6 +148,7 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
         super.viewDidDisappear(animated)
         heightConstraint?.constant -= 1   // the next viewWillAppear must change it (see viewDidLoad)
         hasAppeared = false
+        pasteField += 1   // a paste still being read doesn't land in the next app
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -238,6 +239,7 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
     }
 
     private func startField() {
+        pasteField += 1   // nor in another field
         driver.resetContext()
         applyFieldLayout()
         let type = proxy.keyboardType ?? .default
@@ -459,8 +461,23 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
 
     /// The paste key: the pasteboard's text at the cursor, over a selection like Paste. A keyboard only gets the
     /// pasteboard with Full Access; without it, or with nothing to paste, the key does nothing.
+    /// The text is read off the main thread: iOS fetches it from the app that copied it, which took ~1 s for text
+    /// copied in Slack, and the whole keyboard froze meanwhile (Hieu). It goes in when it arrives, unless the
+    /// keyboard went away or moved to another field first.
+    private static let pasteQueue = DispatchQueue(label: "vikey.paste", qos: .userInitiated)   // serial: pastes land in order
+    private var pasteField = 0   // bumped when the keyboard goes away or starts a new field: a late paste is dropped
     private func paste() {
-        guard hasFullAccess, let text = UIPasteboard.general.string, !text.isEmpty else { return }
+        guard hasFullAccess else { return }
+        let field = pasteField
+        Self.pasteQueue.async { [weak self] in
+            let text = UIPasteboard.general.string
+            DispatchQueue.main.async { self?.pasted(text, field: field) }
+        }
+    }
+
+    private func pasted(_ text: String?, field: Int) {
+        guard field == pasteField, let text, !text.isEmpty else { return }
+        keyboard.pasteReady = true   // there was text to paste, whatever the last tint check thought
         selectionEdited()
         lastCorrection = nil; keepWord = nil   // a Backspace after the paste deletes, it doesn't undo an old fix
         proxy.insertText(text)

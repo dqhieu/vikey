@@ -3,8 +3,8 @@ import Foundation
 import FoundationModels
 #endif
 
-/// AI in the keyboard: a selection rewritten in three styles by Claude Haiku (with the user's own API key, entered in
-/// the app), and next-word ideas from Apple Intelligence on device. ✨ shows only once a key is saved and the keyboard
+/// AI in the keyboard: a selection rewritten in three styles by Claude (the model and the user's own API key are set
+/// in the app), and next-word ideas from Apple Intelligence on device. ✨ shows only once a key is saved and the keyboard
 /// has Full Access (the request goes over the network); next words only on iPhones with Apple Intelligence.
 enum AIAssist {
     #if DEBUG
@@ -36,10 +36,12 @@ enum AIAssist {
         return cachedKey != nil
     }
     private static var cachedKey: String?
+    private static var cachedModel = ClaudeModel.haiku
 
     /// Asks the system and the keychain off the main thread. No prewarm: loading the Apple model at launch cost ~5 MB
     /// on top of a keyboard close to iOS's memory limit; the first answer is a little slower instead.
     static func refresh(fullAccess: Bool) {
+        cachedModel = .saved   // a quick read of the shared settings, on the main thread like the others
         DispatchQueue.global(qos: .utility).async {
             var on = false
             #if canImport(FoundationModels)
@@ -71,7 +73,7 @@ enum AIAssist {
     }
     private static func model(_ core: String, _ style: RewriteStyle, _ vietnamese: Bool) async -> Rewrite? {
         guard let key = cachedKey else { return nil }
-        return await ClaudeRewrite.ask(core, style: style, vietnamese: vietnamese, key: key)
+        return await ClaudeRewrite.ask(core, style: style, vietnamese: vietnamese, key: key, model: cachedModel)
     }
 
     /// `work`'s answer, or nil if it takes longer than `seconds` (a stuck request must not leave "Writing…" forever).
@@ -121,7 +123,7 @@ enum RewriteStyle: Int, CaseIterable {
     }
 }
 
-/// ✨ on Claude Haiku: each style's guide (Hieu's own words for Voice and Natural) and one JSON answer per style.
+/// ✨ on Claude: each style's guide (Hieu's own words for Voice and Natural) and one JSON answer per style.
 enum ClaudeRewrite {
     static func guide(_ style: RewriteStyle) -> String {
         switch style {
@@ -233,9 +235,9 @@ enum ClaudeRewrite {
         "additionalProperties": false,
     ]
 
-    static func ask(_ text: String, style: RewriteStyle, vietnamese: Bool, key: String) async -> Rewrite? {
+    static func ask(_ text: String, style: RewriteStyle, vietnamese: Bool, key: String, model: ClaudeModel) async -> Rewrite? {
         let r = await Claude.json(system: system(style, vietnamese: vietnamese), user: "<text>\n\(text)\n</text>",
-                                  schema: schema, key: key)
+                                  schema: schema, key: key, model: model)
         switch r {
         case .success(let o):
             guard let t = o["text"] as? String else { return nil }

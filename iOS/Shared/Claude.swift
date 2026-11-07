@@ -35,10 +35,30 @@ enum ClaudeKey {
     }
 }
 
+/// The models ✨ can use, picked in the app (Haiku by default: the fastest and cheapest).
+enum ClaudeModel: String, CaseIterable, Identifiable {
+    case haiku = "claude-haiku-5-5", sonnet = "claude-sonnet-5-5", opus = "claude-opus-5-5"
+    var id: String { rawValue }
+    var name: String {
+        switch self {
+        case .haiku: return "Claude Haiku 5.5"
+        case .sonnet: return "Claude Sonnet 5.5"
+        case .opus: return "Claude Opus 5.5"
+        }
+    }
+    /// Sonnet and Opus can hand a request their safety checks decline to another model, server side
+    /// (`fallbacks: "default"`); Haiku has no such fallback.
+    var serverFallback: Bool { self != .haiku }
+    /// The one the app saved; Haiku if none or an unknown one.
+    static var saved: ClaudeModel {
+        VKSettings.register()
+        return ClaudeModel(rawValue: VKSettings.defaults.string(forKey: VKSettings.Key.claudeModel) ?? "") ?? .haiku
+    }
+}
+
 /// The Claude API over plain HTTPS (there's no Anthropic SDK for Swift): ✨ rewrites in the keyboard, and the app's
 /// key check.
 enum Claude {
-    static let model = "claude-haiku-5-5"
     private static let base = URL(string: "https://api.anthropic.com/v1/")!
     private static let version = "2026-10-21"
     /// Nothing about a rewrite is cached on disk.
@@ -61,9 +81,9 @@ enum Claude {
         return r
     }
 
-    /// Whether `key` works with the model: reads the model's record (costs nothing).
-    static func verify(_ key: String) async -> Failure? {
-        var r = request("models/\(model)", key: key)
+    /// Whether `key` works with `model`: reads the model's record (costs nothing).
+    static func verify(_ key: String, model: ClaudeModel) async -> Failure? {
+        var r = request("models/\(model.rawValue)", key: key)
         r.timeoutInterval = 15
         do {
             let (data, resp) = try await session.data(for: r)
@@ -73,35 +93,48 @@ enum Claude {
 
     /// One Messages API call whose answer must be a JSON object matching `schema` (structured outputs).
     /// Effort `low`: a rewrite is a short, latency-sensitive job, and the model can skip thinking on easy ones.
-    static func json(system: String, user: String, schema: [String: Any], key: String,
+    static func json(system: String, user: String, schema: [String: Any], key: String, model: ClaudeModel,
                      effort: String = "low", maxTokens: Int = 4000, timeout: TimeInterval = 30) async -> Result<[String: Any], Failure> {
-        var r = request("messages", key: key)
-        r.httpMethod = "POST"
-        r.timeoutInterval = timeout
-        let body: [String: Any] = [
-            "model": model,
-            "max_tokens": maxTokens,   // thinking counts toward it
-            "system": system,
-            "output_config": ["effort": effort, "format": ["type": "json_schema", "schema": schema]],
-            "messages": [["role": "user", "content": user]],
-        ]
-        do { r.httpBody = try JSONSerialization.data(withJSONObject: body) } catch { return .failure(.malformed) }
+        guard let r = messagesRequest(system: system, user: user, schema: schema, key: key, model: model,
+                                      effort: effort, maxTokens: maxTokens, timeout: timeout) else { return .failure(.malformed) }
         let data: Data, resp: URLResponse
         do { (data, resp) = try await session.data(for: r) } catch { return .failure(.network(error.localizedDescription)) }
         if let f = failure(resp, data) { return .failure(f) }
         guard let msg = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return .failure(.malformed) }
         switch msg["stop_reason"] as? String {
-        case "refusal": return .failure(.refused)
+        case "refusal": return .failure(.refused)   // the fallback model (if any) declined too
         case "max_tokens": return .failure(.truncated)
         default: break
         }
-        // the answer is the text blocks (thinking blocks come first and are skipped)
+        // the answer is the text blocks (thinking blocks, and a fallback block when another model took over, are skipped)
         let text = (msg["content"] as? [[String: Any]] ?? [])
             .filter { $0["type"] as? String == "text" }
             .compactMap { $0["text"] as? String }
             .joined()
         guard let obj = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] else { return .failure(.malformed) }
         return .success(obj)
+    }
+
+    /// The Messages API request `json` sends.
+    static func messagesRequest(system: String, user: String, schema: [String: Any], key: String, model: ClaudeModel,
+                                effort: String = "low", maxTokens: Int = 4000, timeout: TimeInterval = 30) -> URLRequest? {
+        var r = request("messages", key: key)
+        r.httpMethod = "POST"
+        r.timeoutInterval = timeout
+        var body: [String: Any] = [
+            "model": model.rawValue,
+            "max_tokens": maxTokens,   // thinking counts toward it
+            "system": system,
+            "output_config": ["effort": effort, "format": ["type": "json_schema", "schema": schema]],
+            "messages": [["role": "user", "content": user]],
+        ]
+        if model.serverFallback {   // a declined request is retried on Anthropic's recommended fallback model
+            body["fallbacks"] = "default"
+            r.setValue("server-side-fallback-2026-07-01", forHTTPHeaderField: "anthropic-beta")
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: body) else { return nil }
+        r.httpBody = data
+        return r
     }
 
     /// nil for a 2xx; otherwise what went wrong, with the API's own message.

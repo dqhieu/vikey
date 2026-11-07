@@ -21,13 +21,14 @@ enum VKSettings {
         static let diagnostics = "KeyboardDiagnostics"
         static let suggestions = "Suggestions"
         static let autoCorrect = "AutoCorrect"
+        static let claudeModel = "ClaudeModel"   // ✨ rewrites: a ClaudeModel raw value
     }
 
     static let defaultValues: [String: Any] = [
         Key.autoSwitch: true, Key.pauseAfterManual: true, Key.modernOrthography: true, Key.telexStyle: 0, Key.spelling: true,
         Key.restoreIfInvalid: true, Key.englishForWebFields: true,
         Key.autoCapitalize: true, Key.doubleSpacePeriod: true, Key.haptics: true, Key.diagnostics: false,
-        Key.suggestions: true, Key.autoCorrect: true,
+        Key.suggestions: true, Key.autoCorrect: true, Key.claudeModel: ClaudeModel.haiku.rawValue,
     ]
 
     static func register() { defaults.register(defaults: defaultValues) }

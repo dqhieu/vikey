@@ -282,18 +282,18 @@
         }
       }
     },
-    "Chọn một đoạn chữ rồi chạm ✨ trên bàn phím để có ba bản: sửa lỗi, theo giọng của bạn, và tự nhiên. Đoạn chữ được gửi tới Claude Haiku của Anthropic bằng khoá API của bạn (console.anthropic.com), và tính phí vào tài khoản đó. Cần bật Cho phép Truy cập đầy đủ." : {
+    "Chọn một đoạn chữ rồi chạm ✨ trên bàn phím để có ba bản: sửa lỗi, theo giọng của bạn, và tự nhiên. Đoạn chữ được gửi tới Claude của Anthropic bằng khoá API của bạn (console.anthropic.com), và tính phí vào tài khoản đó. Haiku nhanh và rẻ nhất; Sonnet và Opus viết tốt hơn nhưng chậm hơn và đắt hơn nhiều. Cần bật Cho phép Truy cập đầy đủ." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Select some text and tap ✨ on the keyboard for three versions: proofread, in your voice, and natural. The text is sent to Anthropic's Claude Haiku with your API key (console.anthropic.com) and billed to that account. Needs Allow Full Access."
+            "value" : "Select some text and tap ✨ on the keyboard for three versions: proofread, in your voice, and natural. The text is sent to Anthropic's Claude with your API key (console.anthropic.com) and billed to that account. Haiku is the fastest and cheapest; Sonnet and Opus write better but are slower and cost much more. Needs Allow Full Access."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Chọn một đoạn chữ rồi chạm ✨ trên bàn phím để có ba bản: sửa lỗi, theo giọng của bạn, và tự nhiên. Đoạn chữ được gửi tới Claude Haiku của Anthropic bằng khoá API của bạn (console.anthropic.com), và tính phí vào tài khoản đó. Cần bật Cho phép Truy cập đầy đủ."
+            "value" : "Chọn một đoạn chữ rồi chạm ✨ trên bàn phím để có ba bản: sửa lỗi, theo giọng của bạn, và tự nhiên. Đoạn chữ được gửi tới Claude của Anthropic bằng khoá API của bạn (console.anthropic.com), và tính phí vào tài khoản đó. Haiku nhanh và rẻ nhất; Sonnet và Opus viết tốt hơn nhưng chậm hơn và đắt hơn nhiều. Cần bật Cho phép Truy cập đầy đủ."
           }
         }
       }
@@ -915,6 +915,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mở Cài đặt của Vikey"
+          }
+        }
+      }
+    },
+    "Mô hình" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mô hình"
           }
         }
       }

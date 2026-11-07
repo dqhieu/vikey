@@ -169,6 +169,7 @@ struct Tip: View {
 
 /// ✨ rewrites go to Claude with the user's own API key: entered here, kept in the keychain the keyboard shares.
 struct ClaudeKeySection: View {
+    @AppStorage(VKSettings.Key.claudeModel, store: VKSettings.defaults) private var model = ClaudeModel.haiku.rawValue
     @State private var saved = ClaudeKey.read() != nil
     @State private var entry = ""
     @State private var status: Status = .idle
@@ -176,6 +177,10 @@ struct ClaudeKeySection: View {
 
     var body: some View {
         Section {
+            Picker("Mô hình", selection: $model) {
+                ForEach(ClaudeModel.allCases) { Text(verbatim: $0.name).tag($0.rawValue) }
+            }
+            .onChange(of: model) { _, _ in status = .idle }   // a check was for the other model
             if saved {
                 LabeledContent("Khoá API", value: "••••••••")
                 Button("Kiểm tra khoá") { Task { await check(ClaudeKey.read() ?? "") } }
@@ -197,7 +202,7 @@ struct ClaudeKeySection: View {
         } header: {
             Text("✨ Viết lại với Claude")
         } footer: {
-            Text("Chọn một đoạn chữ rồi chạm ✨ trên bàn phím để có ba bản: sửa lỗi, theo giọng của bạn, và tự nhiên. Đoạn chữ được gửi tới Claude Haiku của Anthropic bằng khoá API của bạn (console.anthropic.com), và tính phí vào tài khoản đó. Cần bật Cho phép Truy cập đầy đủ.")
+            Text("Chọn một đoạn chữ rồi chạm ✨ trên bàn phím để có ba bản: sửa lỗi, theo giọng của bạn, và tự nhiên. Đoạn chữ được gửi tới Claude của Anthropic bằng khoá API của bạn (console.anthropic.com), và tính phí vào tài khoản đó. Haiku nhanh và rẻ nhất; Sonnet và Opus viết tốt hơn nhưng chậm hơn và đắt hơn nhiều. Cần bật Cho phép Truy cập đầy đủ.")
         }
     }
 
@@ -212,7 +217,7 @@ struct ClaudeKeySection: View {
 
     @MainActor private func check(_ key: String) async {
         status = .checking
-        switch await Claude.verify(key) {
+        switch await Claude.verify(key, model: ClaudeModel(rawValue: model) ?? .haiku) {
         case nil: status = .ok
         case .badKey: status = .failed(String(localized: "Khoá không đúng hoặc đã bị thu hồi"))
         case .network: status = .failed(String(localized: "Không kết nối được. Kiểm tra mạng rồi thử lại."))

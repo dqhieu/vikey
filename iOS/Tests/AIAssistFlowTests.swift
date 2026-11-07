@@ -129,6 +129,19 @@ final class AIAssistFlowTests: XCTestCase {
         }
     }
 
+    /// The model picked in the app goes in the request; Sonnet and Opus ask for the server-side fallback, Haiku can't.
+    func testRequestUsesTheChosenModel() throws {
+        for model in ClaudeModel.allCases {
+            let r = try XCTUnwrap(Claude.messagesRequest(system: "s", user: "u", schema: ClaudeRewrite.schema, key: "k", model: model))
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(r.httpBody)) as? [String: Any])
+            XCTAssertEqual(body["model"] as? String, model.rawValue)
+            XCTAssertEqual(body["fallbacks"] as? String, model == .haiku ? nil : "default", "\(model)")
+            XCTAssertEqual(r.value(forHTTPHeaderField: "anthropic-beta"), model == .haiku ? nil : "server-side-fallback-2026-07-01")
+            XCTAssertEqual(r.value(forHTTPHeaderField: "x-api-key"), "k")
+        }
+        XCTAssertEqual(ClaudeModel.allCases.map(\.rawValue), ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"])
+    }
+
     func testVersionsFillInOneByOne() {
         let gate = DispatchSemaphore(value: 0)
         AIAssist.stub = .init(rewrite: { t, s, _ in

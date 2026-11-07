@@ -142,6 +142,51 @@ final class AIAssistFlowTests: XCTestCase {
         XCTAssertEqual(ClaudeModel.allCases.map(\.rawValue), ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"])
     }
 
+    /// ↻ asks all three again, each told every version already shown (so far, across taps); VI | EN starts over.
+    func testMoreAsksAgainForDifferentVersions() {
+        var round = 0
+        var seen: [RewriteStyle: [String]] = [:]
+        let lock = NSLock()
+        AIAssist.stub = .init(rewriteFull: { t, s, _ in
+            lock.lock(); defer { lock.unlock() }
+            return Rewrite(text: "\(s) \(round) \(t)", alternative: s == .natural ? "alt \(round)" : nil)
+        }, avoiding: { s, shown in lock.lock(); seen[s] = shown; lock.unlock() })
+        let (vc, p) = make()
+        p.text = "can u send me the file"; p.cursor = 0
+        select(p, vc, p.text)
+        settle { self.key(vc) == .sparkle }
+        tapAI(vc)
+        settle { self.allIn(vc) }
+        XCTAssertEqual(seen[.voice], [], "nothing shown yet")
+        lock.lock(); round = 1; lock.unlock()
+        vc.rewritePanelForTests?.onMore?()
+        XCTAssertEqual(versions(vc), Array(repeating: .loading, count: 3), "all three asked again")
+        settle { self.allIn(vc) }
+        XCTAssertEqual(versions(vc)[RewriteStyle.voice.rawValue], .done("voice 1 can u send me the file"))
+        XCTAssertEqual(seen[.voice], ["voice 0 can u send me the file"])
+        XCTAssertEqual(seen[.natural], ["natural 0 can u send me the file", "alt 0"], "the alternative too")
+        lock.lock(); round = 2; lock.unlock()
+        vc.rewritePanelForTests?.onMore?()
+        settle { self.allIn(vc) }
+        XCTAssertEqual(seen[.proofread], ["proofread 0 can u send me the file", "proofread 1 can u send me the file"], "every round so far")
+        vc.rewritePanelForTests?.onToggleLanguage?()
+        settle { self.allIn(vc) }
+        XCTAssertEqual(seen[.voice], [], "the other language starts over")
+        vc.rewritePanelForTests?.onPick?(.voice)
+        XCTAssertEqual(p.text, "voice 2 can u send me the file")
+    }
+
+    /// After ↻ the prompt lists what was shown: Voice and Natural must differ from it, Proofread checks again.
+    func testMorePrompt() {
+        XCTAssertEqual(ClaudeRewrite.user("hi there", style: .voice, avoiding: []), "<text>\nhi there\n</text>")
+        let voice = ClaudeRewrite.user("hi there", style: .voice, avoiding: ["Hi there!", "Hey you"])
+        XCTAssertTrue(voice.contains("<version>\nHi there!\n</version>\n<version>\nHey you\n</version>"))
+        XCTAssertTrue(voice.contains("clearly different"))
+        let proof = ClaudeRewrite.user("hi there", style: .proofread, avoiding: ["Hi there."])
+        XCTAssertTrue(proof.contains("Check my text again"))
+        XCTAssertFalse(proof.contains("clearly different"), "a proofread isn't made different for its own sake")
+    }
+
     func testVersionsFillInOneByOne() {
         let gate = DispatchSemaphore(value: 0)
         AIAssist.stub = .init(rewrite: { t, s, _ in

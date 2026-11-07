@@ -27,6 +27,9 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
     private var aiTasks: [Task<Void, Never>] = []
     /// The picker's language: VI/EN's when ✨ is tapped, then its own VI | EN (the keys' VI/EN stays as it was).
     private var rewriteVietnamese = true
+    /// Per style, the versions already shown for this selection in this language: ↻ (More) and a retry ask for
+    /// something unlike them.
+    private var rewriteHistory: [[String]] = Array(repeating: [], count: RewriteStyle.allCases.count)
     /// How long one style may take before its card says it failed.
     static var rewriteTimeout: Double = 30
     private var aiNext: [String] = [], aiNextFor = ""
@@ -963,6 +966,7 @@ extension KeyboardViewController {
     private func aiKeyTapped() {
         guard case .ready(let text) = aiState else { return }
         rewriteVietnamese = driver.language == 1
+        rewriteHistory = Array(repeating: [], count: RewriteStyle.allCases.count)
         setAI(.picking(original: text, versions: Array(repeating: .loading, count: RewriteStyle.allCases.count)))
         for style in RewriteStyle.allCases { startRewrite(text, style) }
     }
@@ -971,17 +975,33 @@ extension KeyboardViewController {
     private func toggleRewriteLanguage() {
         guard case .picking(let original, _) = aiState else { return }
         rewriteVietnamese.toggle()
+        rewriteHistory = Array(repeating: [], count: RewriteStyle.allCases.count)   // the other language: nothing shown yet
         aiGen += 1
         aiTasks.forEach { $0.cancel() }; aiTasks = []
         rewritePanel?.vietnamese = rewriteVietnamese
         for style in RewriteStyle.allCases { startRewrite(original, style) }
     }
 
+    /// ↻ in the picker: all three asked again, each told what was already shown so it comes back different. Answers
+    /// still coming are dropped (their versions were never seen).
+    private func moreRewrites() {
+        guard case .picking(let original, let versions) = aiState else { return }
+        for (i, v) in versions.enumerated() where i < rewriteHistory.count {
+            guard case .done(let r) = v else { continue }
+            for t in [r.text, r.alternative].compactMap({ $0?.trimmingCharacters(in: .whitespacesAndNewlines) })
+            where !t.isEmpty && !rewriteHistory[i].contains(t) { rewriteHistory[i].append(t) }
+        }
+        aiGen += 1
+        aiTasks.forEach { $0.cancel() }; aiTasks = []
+        for style in RewriteStyle.allCases { startRewrite(original, style) }
+    }
+
     private func startRewrite(_ original: String, _ style: RewriteStyle) {
         setVersion(style, .loading)
         let gen = aiGen, vietnamese = rewriteVietnamese, limit = Self.rewriteTimeout
+        let shown = rewriteHistory.indices.contains(style.rawValue) ? rewriteHistory[style.rawValue] : []
         aiTasks.append(Task { [weak self] in
-            let r = await AIAssist.withTimeout(limit) { await AIAssist.rewrite(original, style: style, vietnamese: vietnamese) } ?? nil
+            let r = await AIAssist.withTimeout(limit) { await AIAssist.rewrite(original, style: style, vietnamese: vietnamese, avoiding: shown) } ?? nil
             await MainActor.run {
                 guard let self, self.aiGen == gen, !Task.isCancelled else { return }
                 self.setVersion(style, r.map { .done($0) } ?? .failed)
@@ -1082,6 +1102,7 @@ extension KeyboardViewController {
         if case .picking(let o, _) = aiState { panel.original = o }
         panel.show(versions)
         panel.onToggleLanguage = { [weak self] in self?.toggleRewriteLanguage() }
+        panel.onMore = { [weak self] in self?.moreRewrites() }
         panel.onCancel = { [weak self] in      // back to ✨ for the text that's still selected
             guard let self else { return }
             if case .picking(let o, _) = self.aiState, self.selection == o { self.setAI(.ready(o)) } else { self.setAI(.none) }

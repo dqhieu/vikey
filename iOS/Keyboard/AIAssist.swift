@@ -12,6 +12,7 @@ enum AIAssist {
     struct Stub {
         var rewrite: (String, RewriteStyle, Bool) -> String? = { _, _, _ in nil }   // text, style, Vietnamese
         var rewriteFull: ((String, RewriteStyle, Bool) -> Rewrite?)? = nil         // with an alternative
+        var avoiding: ((RewriteStyle, [String]) -> Void)? = nil                     // sees each ask's earlier versions
         var next: (String) -> [String] = { _ in [] }
     }
     static var stub: Stub?
@@ -53,8 +54,9 @@ enum AIAssist {
     }
 
     /// The selection rewritten in `style`, in Vietnamese or English (the keyboard's VI/EN, translating if needed).
+    /// `avoiding`: versions already shown for it (↻ More), which the answer must not repeat.
     /// nil if it failed or the answer wasn't a rewrite of it.
-    static func rewrite(_ text: String, style: RewriteStyle, vietnamese: Bool) async -> Rewrite? {
+    static func rewrite(_ text: String, style: RewriteStyle, vietnamese: Bool, avoiding: [String] = []) async -> Rewrite? {
         // the spaces and line breaks around a selection stay as they were
         let core = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !core.isEmpty, let r = text.range(of: core) else { return nil }
@@ -62,18 +64,19 @@ enum AIAssist {
         var raw: Rewrite?
         #if DEBUG
         if let stub {
+            stub.avoiding?(style, avoiding)
             raw = stub.rewriteFull.map { $0(core, style, vietnamese) } ?? stub.rewrite(core, style, vietnamese).map { Rewrite(text: $0) }
-        } else { raw = await model(core, style, vietnamese) }
+        } else { raw = await model(core, style, vietnamese, avoiding) }
         #else
-        raw = await model(core, style, vietnamese)
+        raw = await model(core, style, vietnamese, avoiding)
         #endif
         guard let raw, let out = RewriteCheck.clean(raw.text, original: core) else { return nil }
         let alt = raw.alternative.flatMap { RewriteCheck.clean($0, original: core) }.flatMap { $0 == out ? nil : lead + $0 + trail }
         return Rewrite(text: lead + out + trail, alternative: alt)
     }
-    private static func model(_ core: String, _ style: RewriteStyle, _ vietnamese: Bool) async -> Rewrite? {
+    private static func model(_ core: String, _ style: RewriteStyle, _ vietnamese: Bool, _ avoiding: [String]) async -> Rewrite? {
         guard let key = cachedKey else { return nil }
-        return await ClaudeRewrite.ask(core, style: style, vietnamese: vietnamese, key: key, model: cachedModel)
+        return await ClaudeRewrite.ask(core, style: style, vietnamese: vietnamese, avoiding: avoiding, key: key, model: cachedModel)
     }
 
     /// `work`'s answer, or nil if it takes longer than `seconds` (a stuck request must not leave "Writing…" forever).
@@ -235,8 +238,38 @@ enum ClaudeRewrite {
         "additionalProperties": false,
     ]
 
-    static func ask(_ text: String, style: RewriteStyle, vietnamese: Bool, key: String, model: ClaudeModel) async -> Rewrite? {
-        let r = await Claude.json(system: system(style, vietnamese: vietnamese), user: "<text>\n\(text)\n</text>",
+    /// The user message: the text, and after ↻ the versions already shown with what to do about them. Kept out of the
+    /// system prompt, which stays the same for a style and language.
+    static func user(_ text: String, style: RewriteStyle, avoiding shown: [String]) -> String {
+        var m = "<text>\n\(text)\n</text>"
+        guard !shown.isEmpty else { return m }
+        let list = shown.map { "<version>\n\($0)\n</version>" }.joined(separator: "\n")
+        switch style {
+        case .proofread:
+            m += """
+
+
+            You already proofread it as:
+            \(list)
+            I wasn't happy with that. Check my text again carefully for anything that was missed or fixed wrongly. \
+            If it really was right, give the same text back.
+            """
+        case .voice, .natural:
+            m += """
+
+
+            You already suggested these versions and I didn't like them:
+            \(list)
+            Write a new version that is clearly different from every one of them: different wording, structure or \
+            angle, not the same sentence with a word or emoji swapped. Keep following the style guide and my meaning. \
+            A new "alternative", if you give one, must differ from all of them too.
+            """
+        }
+        return m
+    }
+
+    static func ask(_ text: String, style: RewriteStyle, vietnamese: Bool, avoiding: [String] = [], key: String, model: ClaudeModel) async -> Rewrite? {
+        let r = await Claude.json(system: system(style, vietnamese: vietnamese), user: user(text, style: style, avoiding: avoiding),
                                   schema: schema, key: key, model: model)
         switch r {
         case .success(let o):

@@ -426,6 +426,23 @@
         }
       }
     },
+    "Viết bản khác" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Write other versions"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Viết bản khác"
+          }
+        }
+      }
+    },
     "Viết lại" : {
       "extractionState" : "stale",
       "localizations" : {

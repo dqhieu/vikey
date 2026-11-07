@@ -11,12 +11,14 @@ enum RewriteVersion: Equatable {
 /// order (no style names on them, Hieu), filling in as each answer comes. The proofread card marks what changed from the
 /// original (removed struck through, added highlighted); Natural's punchier alternative, when there is one, is a card
 /// of its own. A tap on a finished card puts its plain text in place of the selection; a tap on a failed one asks again; Cancel, top right on the title's line (Hieu), keeps the original.
-/// VI | EN, just left of Cancel (Hieu), asks all three again in the other language. Nothing changes in the app before a tap.
+/// VI | EN, just left of Cancel (Hieu), asks all three again in the other language; ↻ (More), left of that, asks all
+/// three again for versions unlike the ones already shown. Nothing changes in the app before a tap.
 final class RewritePanel: UIView {
     var onPick: ((RewriteStyle) -> Void)?
     var onPickAlternative: ((RewriteStyle) -> Void)?
     var onCancel: (() -> Void)?
     var onToggleLanguage: (() -> Void)?
+    var onMore: (() -> Void)?
     var dark = false { didSet { restyle() } }
     /// The versions' language: the lit half of VI | EN.
     var vietnamese = true { didSet { restyle(); setNeedsLayout() } }
@@ -28,6 +30,7 @@ final class RewritePanel: UIView {
     private var cards: [Card] = []          // one per style, each followed by its alternative's (hidden when none)
     private let cancel = UIButton(type: .system)
     private let language = UIButton(type: .custom)
+    private let more = UIButton(type: .system)
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -58,7 +61,12 @@ final class RewritePanel: UIView {
         language.accessibilityLabel = String(localized: "Ngôn ngữ viết lại")
         language.accessibilityHint = String(localized: "Viết lại bằng ngôn ngữ kia")
         language.addTarget(self, action: #selector(tapLanguage), for: .touchUpInside)
-        [title, scroll, language, cancel].forEach(addSubview)
+        more.setImage(UIImage(systemName: "arrow.clockwise", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)), for: .normal)
+        more.layer.cornerRadius = 15; more.layer.cornerCurve = .continuous
+        more.accessibilityIdentifier = "rewrite.more"
+        more.accessibilityLabel = String(localized: "Viết bản khác")
+        more.addTarget(self, action: #selector(tapMore), for: .touchUpInside)
+        [title, scroll, more, language, cancel].forEach(addSubview)
         restyle()
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -78,7 +86,9 @@ final class RewritePanel: UIView {
         // VI | EN: a pill of the same height, just left of Cancel
         let lw = ceil(language.titleLabel?.intrinsicContentSize.width ?? 50) + 28
         language.frame = CGRect(x: cancel.frame.minX - 8 - lw, y: 8, width: lw, height: 30)
-        title.frame = CGRect(x: M + 4, y: 14, width: language.frame.minX - M - 12, height: 18)
+        // ↻: a round pill of the same height, just left of VI | EN
+        more.frame = CGRect(x: language.frame.minX - 8 - 44, y: 8, width: 44, height: 30)
+        title.frame = CGRect(x: M + 4, y: 14, width: max(0, more.frame.minX - M - 12), height: 18)
         scroll.frame = CGRect(x: 0, y: 46, width: W, height: max(0, bounds.height - 46))
         scroll.contentInset.bottom = 8
         var y: CGFloat = 0
@@ -98,6 +108,8 @@ final class RewritePanel: UIView {
         cancel.backgroundColor = key
         cancel.setTitleColor(fg, for: .normal)
         language.backgroundColor = key
+        more.backgroundColor = key
+        more.tintColor = fg
         language.setAttributedTitle(languageTitle(fg), for: .normal)
         language.setAttributedTitle(languageTitle(fg.withAlphaComponent(0.5)), for: .highlighted)
         language.accessibilityValue = vietnamese ? "Tiếng Việt" : "English"
@@ -110,6 +122,7 @@ final class RewritePanel: UIView {
     @objc private func tapCard(_ c: Card) { c.alternative ? onPickAlternative?(c.style) : onPick?(c.style) }
     @objc private func tapCancel() { onCancel?() }
     @objc private func tapLanguage() { onToggleLanguage?() }
+    @objc private func tapMore() { onMore?() }
 
     /// "VI | EN" with the versions' language lit and the other one faint.
     private func languageTitle(_ fg: UIColor) -> NSAttributedString {

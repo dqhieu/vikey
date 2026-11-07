@@ -85,6 +85,7 @@ targets:
       path: Keyboard/VikeyKeyboard.entitlements
       properties:
         com.apple.security.application-groups: [group.com.hieudinh.vikey]
+        com.apple.developer.private-cloud-compute: true   # ✨ rewrites (managed entitlement on the keyboard's App ID)
     settings:
       base:
         PRODUCT_NAME: VikeyKeyboard

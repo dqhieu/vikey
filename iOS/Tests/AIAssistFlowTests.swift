@@ -1,13 +1,13 @@
 import XCTest
 import UIKit
 
-/// Next words (the table, Apple Intelligence on top), proofread with a preview, other words for one word.
-/// The model is stubbed: these test the keyboard's flow, not Apple's answers.
+/// Next words (the table, Apple Intelligence on top); ✨ on the VI/EN key's place rewrites a selection Casual,
+/// Formal and Shorter in a picker, and a tap on a version puts it in. The model is stubbed: these test the keyboard's
+/// flow, not Apple's answers.
 final class AIAssistFlowTests: XCTestCase {
     private let sender = KeyboardView()
 
-    override func setUp() { super.setUp(); KeyboardViewController.wordCheckDelay = 0 }
-    override func tearDown() { AIAssist.stub = nil; KeyboardViewController.wordCheckDelay = 300_000_000; super.tearDown() }
+    override func tearDown() { AIAssist.stub = nil; KeyboardViewController.rewriteTimeout = 30; super.tearDown() }
 
     private func make(_ lang: Int = 0) -> (KeyboardViewController, CursorProxy) {
         let vc = KeyboardViewController()
@@ -23,20 +23,25 @@ final class AIAssistFlowTests: XCTestCase {
     private func type(_ s: String, _ vc: KeyboardViewController) {
         for ch in s { vc.keyboard(sender, didTap: ch == " " ? .space : .char(String(ch).lowercased())) }
     }
-    /// Lets the queued strip update and the model's (stubbed) answer land.
-    /// With a condition, waits up to 10 s for it (CI machines are slow: the word check alone waits 0.3 s first);
-    /// without one, just lets the queued work run.
+    /// Lets the queued strip update and the model's (stubbed) answers land.
+    /// With a condition, waits up to 10 s for it (CI machines are slow); without one, just lets the queued work run.
     private func settle(_ until: (() -> Bool)? = nil, timeout: TimeInterval? = nil) {
         let end = Date().addingTimeInterval(timeout ?? (until == nil ? 0.5 : 10))
         let until = until ?? { false }
         repeat { RunLoop.main.run(until: Date().addingTimeInterval(0.02)) } while !until() && Date() < end
     }
     private func strip(_ vc: KeyboardViewController) -> [Suggestion] { vc.keyboardViewForTests.suggestions }
+    private func key(_ vc: KeyboardViewController) -> KeyboardView.AIKey { vc.keyboardViewForTests.aiKey }
+    private func tapAI(_ vc: KeyboardViewController) { vc.keyboard(sender, didTap: .language) }
+    private func versions(_ vc: KeyboardViewController) -> [RewriteVersion] { vc.rewritePanelForTests?.versions ?? [] }
+    private func allIn(_ vc: KeyboardViewController) -> Bool { !versions(vc).isEmpty && !versions(vc).contains(.loading) }
     private func select(_ p: CursorProxy, _ vc: KeyboardViewController, _ part: String) {
         let r = p.text.range(of: part)!
         p.cursor = p.text.distance(from: p.text.startIndex, to: r.lowerBound); p.selection = part.count
         vc.selectionDidChange(nil)
     }
+    /// A stub that answers each style with its name in front: "casual …", "formal …", "shorter …".
+    private func tagged() -> AIAssist.Stub { .init(rewrite: { t, s, _ in "\(s) \(t)" }) }
 
     // the table
     func testTableVietnameseAndEnglish() {
@@ -57,233 +62,264 @@ final class AIAssistFlowTests: XCTestCase {
         XCTAssertFalse(strip(vc).isEmpty, "and the next ones")
     }
 
-    // proofread: preview, then apply or cancel
-    func testProofreadPreviewThenApplyThenUndo() {
-        AIAssist.stub = .init(proofread: { _ in "I have gone to the store." })
+    // ✨: the picker, three versions, a tap puts one in
+    func testSparkleOpensThePickerWithThreeVersionsAndATapPutsOneIn() {
+        AIAssist.stub = tagged()
         let (vc, p) = make()
-        p.text = "i has went to the store"; p.cursor = 0
+        p.text = "can u send me the file"; p.cursor = 0
         select(p, vc, p.text)
-        settle { self.strip(vc).first?.kind == .proofread }
-        XCTAssertEqual(strip(vc).map(\.kind), [.proofread])
-        vc.keyboard(sender, pickSuggestion: 0)
-        settle { vc.proofreadPanelForTests != nil }
-        XCTAssertNotNil(vc.proofreadPanelForTests, "a preview first")
-        XCTAssertEqual(p.text, "i has went to the store", "nothing changes before Apply")
-        vc.proofreadPanelForTests?.onApply?()
-        XCTAssertEqual(p.text, "I have gone to the store.")
-        XCTAssertNil(vc.proofreadPanelForTests)
-        settle { self.strip(vc).first?.kind == .undo }
-        XCTAssertEqual(strip(vc).map(\.kind), [.undo])
-        vc.keyboard(sender, pickSuggestion: 0)
-        XCTAssertEqual(p.text, "i has went to the store")
+        settle { self.key(vc) == .sparkle }
+        XCTAssertTrue(strip(vc).isEmpty, "nothing in the strip")
+        XCTAssertNil(vc.rewritePanelForTests, "nothing asked before ✨")
+        tapAI(vc)
+        XCTAssertNotNil(vc.rewritePanelForTests, "the picker opens at once")
+        XCTAssertTrue(vc.keyboardViewForTests.isHidden, "over the whole keyboard")
+        settle { self.allIn(vc) }
+        XCTAssertEqual(versions(vc), [.done("casual can u send me the file"), .done("formal can u send me the file"), .done("shorter can u send me the file")])
+        XCTAssertEqual(p.text, "can u send me the file", "nothing changes before a tap")
+        vc.rewritePanelForTests?.onPick?(.formal)
+        XCTAssertEqual(p.text, "formal can u send me the file")
+        XCTAssertNil(vc.rewritePanelForTests)
+        XCTAssertFalse(vc.keyboardViewForTests.isHidden)
+        settle()
+        XCTAssertEqual(key(vc), .off, "VI/EN again, no Undo")
+        XCTAssertEqual(vc.aiStateForTests, .none)
     }
 
-    func testProofreadCancelKeepsTheText() {
-        AIAssist.stub = .init(proofread: { _ in "Fixed." })
+    func testVersionsFillInOneByOne() {
+        let gate = DispatchSemaphore(value: 0)
+        AIAssist.stub = .init(rewrite: { t, s, _ in
+            if s == .formal { _ = gate.wait(timeout: .now() + 5) }   // formal comes late
+            return "\(s) \(t)"
+        })
         let (vc, p) = make()
-        p.text = "fixd it"; p.cursor = 0
+        p.text = "see you soon"; p.cursor = 0
         select(p, vc, p.text)
-        settle { self.strip(vc).first?.kind == .proofread }
-        vc.keyboard(sender, pickSuggestion: 0)
-        settle { vc.proofreadPanelForTests != nil }
-        vc.proofreadPanelForTests?.onCancel?()
-        XCTAssertNil(vc.proofreadPanelForTests)
-        XCTAssertEqual(p.text, "fixd it")
+        settle { self.key(vc) == .sparkle }
+        tapAI(vc)
+        settle { self.versions(vc).first != .loading && self.versions(vc).last != .loading }
+        XCTAssertEqual(versions(vc)[1], .loading, "still coming")
+        vc.rewritePanelForTests?.onPick?(.formal)                     // a loading card does nothing
+        XCTAssertEqual(p.text, "see you soon")
+        XCTAssertNotNil(vc.rewritePanelForTests)
+        gate.signal()
+        settle { self.allIn(vc) }
+        XCTAssertEqual(versions(vc)[1], .done("formal see you soon"))
     }
 
-    func testProofreadWithNoMistakesSaysSo() {
-        AIAssist.stub = .init(proofread: { $0 })
+    func testCancelKeepsTheTextAndGoesBackToSparkle() {
+        AIAssist.stub = tagged()
         let (vc, p) = make()
-        p.text = "All good here."; p.cursor = 0
+        p.text = "fixd it now"; p.cursor = 0
         select(p, vc, p.text)
-        settle { self.strip(vc).first?.kind == .proofread }
-        vc.keyboard(sender, pickSuggestion: 0)
-        settle { self.strip(vc).first?.kind == .busy && self.strip(vc).first?.text != String(localized: "Đang sửa…") }
-        XCTAssertNil(vc.proofreadPanelForTests)
-        XCTAssertEqual(strip(vc).first?.text, String(localized: "Không có lỗi ✓"))
+        settle { self.key(vc) == .sparkle }
+        tapAI(vc)
+        settle { self.allIn(vc) }
+        vc.rewritePanelForTests?.onCancel?()
+        XCTAssertNil(vc.rewritePanelForTests)
+        XCTAssertFalse(vc.keyboardViewForTests.isHidden)
+        XCTAssertEqual(p.text, "fixd it now")
+        XCTAssertEqual(vc.aiStateForTests, .ready("fixd it now"), "still selected: offer it again")
+        XCTAssertEqual(key(vc), .sparkle)
     }
 
-    func testApplyNeedsTheSameSelection() {
-        AIAssist.stub = .init(proofread: { _ in "Two words." })
+    func testAFailedVersionSaysSoAndATapAsksAgain() {
+        var shorterWorks = false
+        AIAssist.stub = .init(rewrite: { t, s, _ in s == .shorter && !shorterWorks ? nil : "\(s) \(t)" })
         let (vc, p) = make()
-        p.text = "two wrds"; p.cursor = 0
+        p.text = "we was late today"; p.cursor = 0
         select(p, vc, p.text)
-        settle { self.strip(vc).first?.kind == .proofread }
-        vc.keyboard(sender, pickSuggestion: 0)
-        settle { vc.proofreadPanelForTests != nil }
-        p.selection = 0; p.cursor = 3            // the user moved away meanwhile
-        vc.proofreadPanelForTests?.onApply?()
-        XCTAssertEqual(p.text, "two wrds", "never replaces the wrong text")
+        settle { self.key(vc) == .sparkle }
+        tapAI(vc)
+        settle { self.allIn(vc) }
+        XCTAssertEqual(versions(vc)[2], .failed)
+        XCTAssertEqual(versions(vc)[0], .done("casual we was late today"), "the others still come")
+        shorterWorks = true
+        vc.rewritePanelForTests?.onPick?(.shorter)                    // retry
+        settle { self.versions(vc)[2] != .failed && self.versions(vc)[2] != .loading }
+        XCTAssertEqual(versions(vc)[2], .done("shorter we was late today"))
+        XCTAssertEqual(p.text, "we was late today", "a retry doesn't put it in")
     }
 
-    // one word selected: its fix, read off a proofread of its sentence
-    func testOneWordGetsItsFix() {
-        AIAssist.stub = .init(proofread: { _ in "I went to the store yesterday." })
+    func testChattyAnswersAreRejected() {
+        AIAssist.stub = .init(rewrite: { _, s, _ in s == .casual ? "Sure! I'd love to help. What would you like me to write?" : "Hey, the meeting moved to 3pm." })
         let (vc, p) = make()
-        p.text = "Hi. I went to the stroe yesterday. Bye"; p.cursor = 0
-        select(p, vc, "stroe")
-        settle { self.strip(vc).first?.kind == .alternative }
-        XCTAssertEqual(strip(vc).map(\.text), ["store"])
-        vc.keyboard(sender, pickSuggestion: 0)
-        XCTAssertEqual(p.text, "Hi. I went to the store yesterday. Bye")
+        p.text = "the meeting is moved to 3pm"; p.cursor = 0
+        select(p, vc, p.text)
+        settle { self.key(vc) == .sparkle }
+        tapAI(vc)
+        settle { self.allIn(vc) }
+        XCTAssertEqual(versions(vc)[0], .failed)
+        XCTAssertEqual(versions(vc)[1], .done("Hey, the meeting moved to 3pm."))
     }
 
-    func testCorrectWordSaysNoMistakes() {
-        AIAssist.stub = .init(proofread: { _ in "I went to the store yesterday." })
+    func testRewriteCheck() {
+        XCTAssertNil(RewriteCheck.clean("Sure, I'd be happy to help you write an email! Who is it for?", original: "can you help me write an email"))
+        XCTAssertNil(RewriteCheck.clean(String(repeating: "a long answer ", count: 40), original: "hi there"))
+        XCTAssertEqual(RewriteCheck.clean("Here is the formal version: I will arrive at 5 pm.", original: "ill be there at 5"), "I will arrive at 5 pm.")
+        XCTAssertEqual(RewriteCheck.clean("\"Hẹn gặp lại bạn nhé!\"", original: "see you"), "Hẹn gặp lại bạn nhé!")
+        XCTAssertEqual(RewriteCheck.clean("<<<\nSee you soon.\n>>>", original: "see ya"), "See you soon.")
+    }
+
+    // language: the keyboard's VI/EN decides (Hieu)
+    func testTheKeyboardsLanguageDecides() {
+        let lock = NSLock()
+        var asked: [Bool] = []
+        AIAssist.stub = .init(rewrite: { t, _, vi in lock.lock(); asked.append(vi); lock.unlock(); return t })
+        let (vc, p) = make(1)
+        p.text = "see you soon"; p.cursor = 0
+        select(p, vc, p.text)
+        settle { self.key(vc) == .sparkle }
+        tapAI(vc)
+        settle { self.allIn(vc) }
+        XCTAssertEqual(asked, [true, true, true], "VI: rewritten in Vietnamese")
+    }
+
+    func testSpacesAroundASelectionStay() {
+        AIAssist.stub = .init(rewrite: { _, _, _ in "Hello world." })
         let (vc, p) = make()
-        p.text = "i went to the store yesterday"; p.cursor = 0
-        select(p, vc, "store")
-        settle { self.strip(vc).first?.text == String(localized: "Không có lỗi ✓") }
-        XCTAssertEqual(strip(vc).map(\.text), [String(localized: "Không có lỗi ✓")])
+        p.text = "a  helo wrld \nb"; p.cursor = 1; p.selection = 12   // "  helo wrld " (spaces only around it)
+        vc.selectionDidChange(nil)
+        settle { self.key(vc) == .sparkle }
+        tapAI(vc)
+        settle { self.allIn(vc) }
+        vc.rewritePanelForTests?.onPick?(.casual)
+        XCTAssertEqual(p.text, "a  Hello world. \nb", "the spaces around it stay")
     }
 
-    func testWordFixAlignment() {
-        func fix(_ w: String, _ i: Int, _ s: String, _ c: String) -> String? { WordFix.replacement(for: w, at: i, in: s, corrected: c) }
-        XCTAssertEqual(fix("has", 1, "I has went to the store", "I have gone to the store."), "have")
-        XCTAssertEqual(fix("lam", 4, "hôm nay tôi đi lam muộn", "Hôm nay tôi đi làm muộn."), "làm")
-        XCTAssertEqual(fix("dont", 1, "she dont like it", "She doesn't like it."), "doesn't")
-        XCTAssertEqual(fix("banj", 2, "cảm ơn banj nhiều", "Cảm ơn bạn nhiều."), "bạn")
-        XCTAssertEqual(fix("mesage", 3, "I recieve your mesage", "I received your message."), "message", "no added period")
-        XCTAssertNil(fix("store", 4, "I went to the store", "I went to the store."), "only punctuation changed")
-        XCTAssertNil(fix("hello", 0, "hello there", "Hello there."), "only case changed")
-        XCTAssertEqual(fix("alot", 1, "thanks alot", "Thanks a lot."), "a lot", "one word into two")
-        let (h, t) = WordFix.sentence(before: "First one. Then the ", after: " ends here. Next")
-        XCTAssertEqual(h, "Then the "); XCTAssertEqual(t, " ends here.")
+    // what gets ✨
+    func testOneWordGetsNoSparkle() {
+        AIAssist.stub = tagged()
+        let (vc, p) = make()
+        p.text = "We was late"; p.cursor = 0
+        select(p, vc, "was")
+        settle()
+        XCTAssertEqual(key(vc), .off, "a single word: VI/EN stays")
+        XCTAssertEqual(vc.aiStateForTests, .none)
     }
 
-    func testNoSelectionFeaturesWithoutAppleIntelligence() {
+    func testOnlyEmojiOrPunctuationIsIgnored() {
+        AIAssist.stub = tagged()
+        let (vc, p) = make()
+        p.text = "ok 😀 !! fine"; p.cursor = 3
+        select(p, vc, "😀 !!")
+        settle()
+        XCTAssertEqual(vc.aiStateForTests, .none)
+    }
+
+    func testMultiLineAndLongSelectionsAreOffered() {   // no paragraph or length limit (Hieu)
+        AIAssist.stub = .init(rewrite: { _, _, _ in "Line one.\nLine two." })
+        let (vc, p) = make()
+        p.text = "line one\nline two"; p.cursor = 0
+        select(p, vc, p.text)
+        settle { self.key(vc) == .sparkle }
+        tapAI(vc)
+        settle { self.allIn(vc) }
+        vc.rewritePanelForTests?.onPick?(.casual)
+        XCTAssertEqual(p.text, "Line one.\nLine two.")
+        p.text = String(repeating: "some words here ", count: 200); p.cursor = 0
+        select(p, vc, p.text)
+        settle()
+        XCTAssertEqual(key(vc), .sparkle)
+    }
+
+    func testNoSparkleWithoutAppleIntelligence() {
         guard !AIAssist.available else { return }   // a simulator/phone with the model: nothing to check here
         let (vc, p) = make()
         p.text = "some words here"; p.cursor = 0
         select(p, vc, p.text)
         settle()
-        XCTAssertFalse(strip(vc).contains { $0.kind == .proofread || $0.kind == .busy })
+        XCTAssertEqual(key(vc), .off, "the key stays VI/EN")
     }
 
-    // state: nothing from one selection outlives it (Tony: "fixed" / "no mistake" stuck after selecting elsewhere)
-    func testNoMistakesGoesAwayWhenSelectingElsewhere() {
-        AIAssist.stub = .init(proofread: { $0 == "I went to the store yesterday." ? $0 : "I went to the store yesterday." })
-        let (vc, p) = make()
-        p.text = "I went to the store yesterday. All fine"; p.cursor = 0
-        select(p, vc, "store")
-        settle { if case .word(_, .noMistakes) = vc.aiStateForTests { return true }; return false }
-        select(p, vc, "All fine")
-        settle()
-        XCTAssertEqual(vc.aiStateForTests, .text("All fine", .ready))
-        XCTAssertEqual(strip(vc).map(\.kind), [.proofread])
+    func testTheVIENKeyIsSparkleOnlyWhileTextIsSelected() {
+        AIAssist.stub = tagged()
+        let (vc, p) = make(1)
+        let kv = vc.keyboardViewForTests
+        p.text = "fixd it now"; p.cursor = 0
+        select(p, vc, p.text)
+        settle { self.key(vc) == .sparkle }
+        tapAI(vc)
+        XCTAssertEqual(kv.languageShort, "VI", "✨, not a language switch")
+        vc.rewritePanelForTests?.onCancel?()
         p.selection = 0; vc.selectionDidChange(nil)
         settle()
-        XCTAssertEqual(vc.aiStateForTests, .none)
-        XCTAssertFalse(strip(vc).contains { $0.kind == .busy || $0.kind == .proofread || $0.kind == .alternative })
+        XCTAssertEqual(key(vc), .off)
+        vc.keyboard(sender, didTap: .language)
+        XCTAssertEqual(kv.languageShort, "EN", "VI/EN again without a selection")
     }
 
-    func testALateAnswerForAnOldSelectionIsDropped() {
-        AIAssist.stub = .init(proofread: { _ in "Fixed text here." })
-        let (vc, p) = make()
-        p.text = "fixd text here and more words"; p.cursor = 0
-        select(p, vc, "fixd text here")
-        settle { vc.aiStateForTests == .text("fixd text here", .ready) }
-        vc.keyboard(sender, pickSuggestion: 0)                  // asked…
-        select(p, vc, "more words")                              // …and moved on before the answer
-        settle()
-        XCTAssertNil(vc.proofreadPanelForTests, "no preview for text that isn't selected any more")
-        XCTAssertEqual(vc.aiStateForTests, .text("more words", .ready))
-    }
-
-    func testSelectingOtherTextClosesThePreview() {
-        AIAssist.stub = .init(proofread: { _ in "Two words." })
-        let (vc, p) = make()
-        p.text = "two wrds and other text"; p.cursor = 0
-        select(p, vc, "two wrds")
-        settle { vc.aiStateForTests == .text("two wrds", .ready) }
-        vc.keyboard(sender, pickSuggestion: 0)
-        settle { vc.proofreadPanelForTests != nil }
-        XCTAssertTrue(vc.keyboardViewForTests.isHidden, "the preview takes the whole keyboard")
-        select(p, vc, "other text")
-        XCTAssertNil(vc.proofreadPanelForTests)
-        XCTAssertFalse(vc.keyboardViewForTests.isHidden)
-    }
-
-    func testCancelShowsTheKeysAgainAndNothingSticks() {
-        AIAssist.stub = .init(proofread: { _ in "Fixed it." })
-        let (vc, p) = make()
-        p.text = "fixd it"; p.cursor = 0
-        select(p, vc, p.text)
-        settle { vc.aiStateForTests == .text("fixd it", .ready) }
-        vc.keyboard(sender, pickSuggestion: 0)
-        settle { vc.proofreadPanelForTests != nil }
-        vc.proofreadPanelForTests?.onCancel?()
-        XCTAssertFalse(vc.keyboardViewForTests.isHidden)
-        XCTAssertEqual(vc.aiStateForTests, .text("fixd it", .ready))
-        XCTAssertEqual(p.text, "fixd it")
-    }
-
-    func testMovingAwayEndsUndo() {
-        AIAssist.stub = .init(proofread: { _ in "Fixed it." })
-        let (vc, p) = make()
-        p.text = "start fixd it"; p.cursor = 0
-        select(p, vc, "fixd it")
-        settle { vc.aiStateForTests == .text("fixd it", .ready) }
-        vc.keyboard(sender, pickSuggestion: 0)
-        settle { vc.proofreadPanelForTests != nil }
-        vc.proofreadPanelForTests?.onApply?()
-        settle { self.strip(vc).first?.kind == .undo }
-        p.cursor = 2; vc.selectionDidChange(nil)                // tapped somewhere else
-        settle()
-        XCTAssertEqual(vc.aiStateForTests, .none)
-    }
-
-    func testWordFixReplacesOnlyThatWordAndOffersUndo() {
-        AIAssist.stub = .init(proofread: { _ in "We were late." })
-        let (vc, p) = make()
-        p.text = "We was late"; p.cursor = 0
-        select(p, vc, "was")
-        settle { self.strip(vc).first?.kind == .alternative }
-        XCTAssertEqual(strip(vc).map(\.text), ["were"])
-        vc.keyboard(sender, pickSuggestion: 0)
-        XCTAssertEqual(p.text, "We were late")
-        settle { self.strip(vc).first?.kind == .undo }
-        vc.keyboard(sender, pickSuggestion: 0)
-        XCTAssertEqual(p.text, "We was late")
-    }
-
-    func testSpacesAroundASelectionStay() {
-        AIAssist.stub = .init(proofread: { _ in "Hello world." })
-        let (vc, p) = make()
-        p.text = "a  helo wrld \nb"; p.cursor = 1; p.selection = 12   // "  helo wrld " (spaces only around it)
-        vc.selectionDidChange(nil)
-        settle { if case .text(_, .ready) = vc.aiStateForTests { return true }; return false }
-        vc.keyboard(sender, pickSuggestion: 0)
-        settle { vc.proofreadPanelForTests != nil }
-        vc.proofreadPanelForTests?.onApply?()
-        XCTAssertEqual(p.text, "a  Hello world. \nb", "the spaces around it stay")
-    }
-
-    // what comes back from the model
-    func testChatterAndTranslationsAreRejected() {
-        XCTAssertNil(ProofreadCheck.clean("Sure, here are the corrected versions of the text:\n\n1. \"this .\" should be \"this.\"", original: "this . is a test , hello"))
-        XCTAssertNil(ProofreadCheck.clean("Today I went to work late.", original: "Hom nay toi di lam muon"))
-        XCTAssertNil(ProofreadCheck.clean("Sure, I'd be happy to help you write an email! What is the purpose of the email and who is the recipient?", original: "can you help me write an email"))
-        XCTAssertEqual(ProofreadCheck.clean("\"Hôm nay tôi đi làm muộn.\"", original: "Hom nay toi di lam muon"), "Hôm nay tôi đi làm muộn.")
-        XCTAssertEqual(ProofreadCheck.clean("<<<\nWe were late.\n>>>", original: "we was late"), "We were late.")
-        XCTAssertEqual(ProofreadCheck.clean("Okay.", original: "ok"), "Okay.")
-    }
-
-    func testFailedAnswerSaysCouldntFix() {
-        AIAssist.stub = .init(proofread: { _ in "Sure! Here is a long answer that has nothing at all to do with the text you selected." })
+    func testPasteStaysPasteWhileTextIsSelected() {
+        var asked = 0
+        AIAssist.stub = .init(rewrite: { t, _, _ in asked += 1; return t })
         let (vc, p) = make()
         p.text = "fixd it now"; p.cursor = 0
         select(p, vc, p.text)
-        settle { vc.aiStateForTests == .text("fixd it now", .ready) }
-        vc.keyboard(sender, pickSuggestion: 0)
-        settle { vc.aiStateForTests == .text("fixd it now", .failed) }
-        XCTAssertEqual(strip(vc).first?.text, String(localized: "Không sửa được · Thử lại"))
-        XCTAssertNil(vc.proofreadPanelForTests)
+        settle { self.key(vc) == .sparkle }
+        vc.keyboard(sender, didTap: .paste)
+        settle()
+        XCTAssertEqual(asked, 0)
+        XCTAssertNil(vc.rewritePanelForTests)
+    }
+
+    func testShiftKeepsTheSelectionState() {
+        AIAssist.stub = tagged()
+        let (vc, p) = make()
+        p.text = "fixd it now"; p.cursor = 0
+        select(p, vc, p.text)
+        settle { vc.aiStateForTests == .ready("fixd it now") }
+        vc.keyboard(sender, didTap: .shift)
+        settle()
+        XCTAssertEqual(vc.aiStateForTests, .ready("fixd it now"))
+        XCTAssertEqual(key(vc), .sparkle)
+    }
+
+    // state: nothing from one selection outlives it
+    func testALateAnswerForAnOldSelectionIsDropped() {
+        let gate = DispatchSemaphore(value: 0)
+        AIAssist.stub = .init(rewrite: { t, s, _ in _ = gate.wait(timeout: .now() + 5); return "\(s) \(t)" })
+        let (vc, p) = make()
+        p.text = "fixd text here and more words"; p.cursor = 0
+        select(p, vc, "fixd text here")
+        settle { vc.aiStateForTests == .ready("fixd text here") }
+        tapAI(vc)                                                 // asked…
+        select(p, vc, "more words")                              // …and moved on before the answers
+        for _ in 0..<3 { gate.signal() }
+        settle()
+        XCTAssertNil(vc.rewritePanelForTests, "no picker for text that isn't selected any more")
+        XCTAssertEqual(vc.aiStateForTests, .ready("more words"))
+    }
+
+    func testPickNeedsTheSameSelection() {
+        AIAssist.stub = tagged()
+        let (vc, p) = make()
+        p.text = "two wrds"; p.cursor = 0
+        select(p, vc, p.text)
+        settle { self.key(vc) == .sparkle }
+        tapAI(vc)
+        settle { self.allIn(vc) }
+        p.selection = 0; p.cursor = 3            // the user moved away meanwhile
+        vc.rewritePanelForTests?.onPick?(.casual)
+        XCTAssertEqual(p.text, "two wrds", "never replaces the wrong text")
+    }
+
+    func testSelectingOtherTextClosesThePicker() {
+        AIAssist.stub = tagged()
+        let (vc, p) = make()
+        p.text = "two wrds and other text"; p.cursor = 0
+        select(p, vc, "two wrds")
+        settle { self.key(vc) == .sparkle }
+        tapAI(vc)
+        settle { self.allIn(vc) }
+        select(p, vc, "other text")
+        XCTAssertNil(vc.rewritePanelForTests)
+        XCTAssertFalse(vc.keyboardViewForTests.isHidden)
+        XCTAssertEqual(vc.aiStateForTests, .ready("other text"))
     }
 
     // review findings (each was a way to write the wrong text or show a stale state)
     func testTypingOverASelectedJustTypedWordReplacesIt() {
-        AIAssist.stub = .init(proofread: { $0 })
+        AIAssist.stub = tagged()
         let (vc, p) = make(1)
         type("the toi", vc)
         select(p, vc, "toi")                                   // the word the engine was still typing
@@ -299,84 +335,12 @@ final class AIAssistFlowTests: XCTestCase {
         XCTAssertFalse(strip(vc).contains { $0.kind == .next }, "a tap would replace the selection")
     }
 
-    func testFailureIsNotNoMistakesAndCanRetry() {
-        var answer: String? = nil
-        AIAssist.stub = .init(proofread: { _ in answer })
-        let (vc, p) = make()
-        p.text = "We was late"; p.cursor = 0
-        select(p, vc, "was")
-        settle { vc.aiStateForTests == .word("was", .failed) }
-        XCTAssertEqual(strip(vc).first?.text, String(localized: "Không sửa được · Thử lại"))
-        answer = "We were late."
-        vc.keyboard(sender, pickSuggestion: 0)                    // retry
-        settle { self.strip(vc).first?.kind == .alternative }
-        XCTAssertEqual(strip(vc).map(\.text), ["were"])
-    }
-
-    func testShiftAndLanguageKeysKeepTheSelectionState() {
-        AIAssist.stub = .init(proofread: { _ in "Fixed it now." })
-        let (vc, p) = make()
-        p.text = "fixd it now"; p.cursor = 0
-        select(p, vc, p.text)
-        settle { vc.aiStateForTests == .text("fixd it now", .ready) }
-        vc.keyboard(sender, didTap: .shift)
-        vc.keyboard(sender, didTap: .language)
-        settle()
-        XCTAssertEqual(vc.aiStateForTests, .text("fixd it now", .ready))
-        XCTAssertEqual(strip(vc).map(\.kind), [.proofread])
-    }
-
-    func testCancelGoesBackToProofread() {
-        AIAssist.stub = .init(proofread: { _ in "Fixed it now." })
-        let (vc, p) = make()
-        p.text = "fixd it now"; p.cursor = 0
-        select(p, vc, p.text)
-        settle { vc.aiStateForTests == .text("fixd it now", .ready) }
-        vc.keyboard(sender, pickSuggestion: 0)
-        settle { vc.proofreadPanelForTests != nil }
-        vc.proofreadPanelForTests?.onCancel?()
-        settle()
-        XCTAssertEqual(vc.aiStateForTests, .text("fixd it now", .ready), "still selected: offer it again")
-        XCTAssertEqual(p.text, "fixd it now")
-    }
-
-    func testOnlyEmojiOrPunctuationIsIgnored() {
-        AIAssist.stub = .init(proofread: { $0 })
-        let (vc, p) = make()
-        p.text = "ok 😀 !! fine"; p.cursor = 3
-        select(p, vc, "😀 !!")
-        settle()
-        XCTAssertEqual(vc.aiStateForTests, .none)
-    }
-
-    func testShortAnswersAndLeadInsAreChecked() {
-        XCTAssertNil(ProofreadCheck.clean("Thank you.", original: "cam on"))
-        XCTAssertNil(ProofreadCheck.clean("It's 3 PM.", original: "what time"))
-        XCTAssertEqual(ProofreadCheck.clean("Cảm ơn.", original: "cam on"), "Cảm ơn.")
-        XCTAssertEqual(ProofreadCheck.clean("Here is the corrected text: I went to the store yesterday and bought some apples for my mom.",
-                                            original: "i has went to the store yesterday and buyed some apple for my mom"),
-                       "I went to the store yesterday and bought some apples for my mom.")
-    }
-
-    func testMultiLineOrGappedSelectionsAreNotProofread() {
-        AIAssist.stub = .init(proofread: { $0 })
-        let (vc, p) = make()
-        p.text = "She don't know it  The weather were bad"; p.cursor = 0   // what iOS handed over for 3 lines
-        select(p, vc, p.text)
-        settle { if case .text(_, .onePara) = vc.aiStateForTests { return true }; return false }
-        XCTAssertEqual(strip(vc).first?.text, String(localized: "Hãy chọn trong một đoạn"))
-        p.text = "line one\nline two"; p.cursor = 0
-        select(p, vc, p.text)
-        settle { if case .text(_, .onePara) = vc.aiStateForTests { return true }; return false }
-        XCTAssertEqual(strip(vc).first?.kind, .busy)
-    }
-
-    func testTappingAStripNoteNeverTypesAKey() {
-        AIAssist.stub = .init(proofread: { $0 })
+    func testTappingTheStripNeverTypesAKey() {
+        AIAssist.stub = tagged()
         let (vc, p) = make()
         p.text = "All good here."; p.cursor = 0
         select(p, vc, p.text)
-        settle { vc.aiStateForTests == .text("All good here.", .ready) }
+        settle { vc.aiStateForTests == .ready("All good here.") }
         let kv = vc.keyboardViewForTests
         XCTAssertNil(kv.capForTests(at: CGPoint(x: 100, y: 20)), "the strip is not the Q-row")
         XCTAssertNotNil(kv.capForTests(at: CGPoint(x: 100, y: kv.bounds.height - 30)))

@@ -15,32 +15,27 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
     private var heightConstraint: NSLayoutConstraint?
     private var emojiView: EmojiKeyboardView?
     // Apple Intelligence on a selection (AIAssist): one state, replaced whenever the selection changes, so nothing
-    // from an earlier selection ("No mistakes", a fix, the preview, Undo) can outlive it. `aiGen` tags each request;
-    // an answer for an older state is dropped.
+    // from an earlier selection (the picker, its versions) can outlive it. `aiGen` tags each request; an answer for
+    // an older state is dropped.
     enum AIState: Equatable {
         case none
-        case word(String, Check)                  // one word selected: its fix
-        case text(String, Check)                  // several words: ✨ Proofread, then the preview
-        case preview(original: String, corrected: String)
-        case applied(original: String, inserted: String, after: String)   // Undo, while the fix is still right there
+        case ready(String)                                           // two words or more selected: ✨ on VI/EN
+        case picking(original: String, versions: [RewriteVersion])   // ✨ tapped: the picker, one version per style
     }
-    enum Check: Equatable { case ready, working, fixes([String]), noMistakes, failed, tooLong, onePara }
     private(set) var aiState: AIState = .none
     private var aiGen = 0
-    private var aiSelTask: Task<Void, Never>?
+    private var aiTasks: [Task<Void, Never>] = []
+    /// How long one style may take before its card says it failed (the three may queue up for the model).
+    static var rewriteTimeout: Double = 30
     private var aiNext: [String] = [], aiNextFor = ""
     private var aiNextTask: Task<Void, Never>?
     private var selection: String?
     private var selectionAt = ""            // the text just before it: the same word elsewhere is another selection
-    private var proofreadPanel: ProofreadPanel?
-    /// Longer selections aren't offered: the model's window is small, and the app may hand over only part of them.
-    static let proofreadLimit = 1500
-    /// Wait before checking a selected word (handles may still be moving); tests set 0.
-    static var wordCheckDelay: UInt64 = 300_000_000
+    private var rewritePanel: RewritePanel?
     /// The user's Text Replacements (Settings › General › Keyboard), like the system keyboard: "omw" → "On my way!"
     private var textReplacements: [String: String] = [:]
     func setTextReplacementsForTests(_ r: [String: String]) { textReplacements = r }
-    var proofreadPanelForTests: ProofreadPanel? { proofreadPanel }
+    var rewritePanelForTests: RewritePanel? { rewritePanel }
     var aiStateForTests: AIState { aiState }
     private var emojiQuery = ""
     /// Our own copy of the text before the cursor, kept up to date from our edits. Asking the app for it
@@ -154,7 +149,7 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
         stallWatch?.invalidate(); stallWatch = nil
         keyboard.feedback.stop()
         KBLog.flush()
-        setAI(.none)                   // a late answer must not open the preview off screen
+        setAI(.none)                   // a late answer must not fill the picker off screen
         super.viewWillDisappear(animated)
     }
 
@@ -274,7 +269,7 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
         keyboard.returnTitle = title
         keyboard.returnIsBlue = blue
         emojiView?.dark = keyboard.dark
-        proofreadPanel?.dark = keyboard.dark
+        rewritePanel?.dark = keyboard.dark
         if emojiView?.searching == true { updateEmojiQuery() }   // VI/EN changes how the query reads
     }
 
@@ -329,7 +324,6 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
         let sel = raw.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
         let at = sel == nil ? "" : String((proxy.documentContextBeforeInput ?? "").suffix(40))
         guard sel != selection || at != selectionAt else {
-            if sel == nil, case .applied = aiState, !undoStillFits() { setAI(.none) }   // the user tapped elsewhere
             return
         }
         selection = sel; selectionAt = at
@@ -431,6 +425,7 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
             keyboard.layer_ = l
             if l == .letters { updateAutoShift(lastContext ?? "") }   // back on ABC after a new line or ". ": the capital shows
         case .language:
+            if keyboard.aiKeyShown { aiKeyTapped(); return }   // ✨ while text is selected
             lastCorrection = nil
             driver.manualSwitch(at: now)
             fieldLanguage = nil
@@ -648,7 +643,8 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
 
     func updateSuggestions() {
         suggestionsDirty = false
-        if KeyboardView.barOn, correctsHere, showSpecialSuggestions() { return }
+        refreshAIKey()
+        if KeyboardView.barOn, correctsHere, showNextWords() { return }
         // auto-correct decides its fix here too, so this runs with the strip hidden (the cells just don't show)
         guard suggestionsOn || autoCorrectOn, correctsHere, !wordPrefix.isEmpty, !shownWord.isEmpty else {
             if !candidates.isEmpty || !(keyboard?.suggestions.isEmpty ?? true) { candidates = []; willCorrect = false; pendingFix = nil; keyboard.suggestions = [] }
@@ -750,10 +746,6 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
         let cell = cells[index]
         switch cell.kind {
         case .next: insertNextWord(cell.text); return
-        case .proofread: retryOrProofread(); return
-        case .alternative: replaceSelection(with: cell.text); return
-        case .undo: undoProofread(); return
-        case .busy: return
         case .word: break
         }
         lastCorrection = nil
@@ -928,69 +920,87 @@ extension KeyboardViewController: EmojiKeyboardDelegate {
 // MARK: Apple Intelligence and next words
 
 extension KeyboardViewController {
-    /// Moves to a new state: drops answers still coming for the old one, opens or closes the preview, redraws the strip.
+    /// Moves to a new state: drops answers still coming for the old one, opens or closes the picker, redraws the strip.
     private func setAI(_ new: AIState) {
-        let wasPreview: Bool = { if case .preview = aiState { return true }; return false }()
-        if new == aiState && !wasPreview { return }
+        if new == aiState { return }
         aiGen += 1
-        aiSelTask?.cancel(); aiSelTask = nil
+        aiTasks.forEach { $0.cancel() }; aiTasks = []
         aiState = new
-        if case .preview(let o, let c) = new { showPreview(original: o, corrected: c) } else if proofreadPanel != nil { closePreview() }
+        if case .picking(_, let v) = new { showPicker(v) } else if rewritePanel != nil { closePicker() }
+        refreshAIKey()
         scheduleSuggestions()
     }
 
-    /// The selection changed (or went away): start over from it.
+    /// The selection changed (or went away): start over from it. Nothing is asked until ✨ is tapped.
     private func selectionChanged() {
-        guard let sel = selection, AIAssist.available, KeyboardView.barOn, correctsHere else {
-            // no selection: only Undo survives, and only while the fix is still right there
-            if case .applied = aiState, undoStillFits() { return }
+        guard let sel = selection, AIAssist.available, correctsHere else {
             if aiState != .none { setAI(.none) }
             return
         }
-        if case .preview(let o, _) = aiState, o == sel { return }       // the same text, still being looked at
+        if case .picking(let o, _) = aiState, o == sel { return }       // the same text, still being looked at
+        setAI(offer(for: sel))
+    }
+
+    /// ✨ for two words or more (Hieu: a single word has nothing to rewrite); nothing for only emoji, digits or
+    /// punctuation. No length or one-paragraph limit (Hieu): a selection too long for the model fails in its cards,
+    /// and iOS's copy of a selection across lines can miss a line, which a rewrite would then delete.
+    private func offer(for sel: String) -> AIState {
         let core = sel.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard core.contains(where: { $0.isLetter }) else { setAI(.none); return }   // only emoji, digits or punctuation
-        if !core.contains(where: { $0.isWhitespace }) && core.count <= 40 {
-            setAI(.word(sel, .working)); checkWord(sel)
-        } else {
-            // iOS can hand over a wrong copy of a selection across lines: "line 1  line 3", the middle line gone
-            // (seen in the simulator). Replacing it would delete text, so only one paragraph, with no gap in it.
-            let risky = core.contains("\n") || core.contains("\r") || core.contains("  ")
-            setAI(.text(sel, risky ? .onePara : sel.count > Self.proofreadLimit ? .tooLong : .ready))
-        }
+        guard core.contains(where: { $0.isLetter }), core.contains(where: { $0.isWhitespace }) else { return .none }
+        return .ready(sel)
     }
 
-    /// Undo stays only while the fix is exactly where it was put: the text before the cursor ends with it and the
-    /// text after the cursor is what followed it then.
-    private func undoStillFits() -> Bool {
-        guard case .applied(_, let ins, let after) = aiState else { return false }
-        let before = proxy.documentContextBeforeInput ?? "", now = proxy.documentContextAfterInput ?? ""
-        return before.hasSuffix(String(ins.suffix(100))) && now.hasPrefix(String(after.prefix(40)))
+    /// The VI/EN key's place for the current state.
+    private func refreshAIKey() {
+        guard let keyboard else { return }
+        keyboard.aiKey = aiState == .none ? .off : .sparkle   // still ✨ under the picker: back to it on Cancel
     }
 
-    /// The strip for the current state, or next words. True when it filled the strip.
-    func showSpecialSuggestions() -> Bool {
-        func note(_ t: String) -> [Suggestion] { [Suggestion(text: t, kind: .busy)] }
-        switch aiState {
-        case .word(_, let c), .text(_, let c):
-            let isWord: Bool = { if case .word = aiState { return true }; return false }()
-            switch c {
-            case .ready: keyboard.suggestions = [Suggestion(text: String(localized: "Sửa lỗi"), kind: .proofread)]
-            case .working: keyboard.suggestions = note(isWord ? String(localized: "Đang kiểm tra…") : String(localized: "Đang sửa…"))
-            case .fixes(let f): keyboard.suggestions = f.prefix(3).map { Suggestion(text: $0, kind: .alternative) }
-            case .noMistakes: keyboard.suggestions = note(String(localized: "Không có lỗi ✓"))
-            case .failed: keyboard.suggestions = [Suggestion(text: String(localized: "Không sửa được · Thử lại"), kind: .proofread)]   // tap to retry
-            case .tooLong: keyboard.suggestions = note(String(localized: "Đoạn quá dài để sửa"))
-            case .onePara: keyboard.suggestions = note(String(localized: "Hãy chọn trong một đoạn"))
+    /// ✨ on the VI/EN key: the picker opens at once and each style fills in as it comes, in the keyboard's language
+    /// (Hieu: VI/EN decides, translating if needed).
+    private func aiKeyTapped() {
+        guard case .ready(let text) = aiState else { return }
+        setAI(.picking(original: text, versions: Array(repeating: .loading, count: RewriteStyle.allCases.count)))
+        for style in RewriteStyle.allCases { startRewrite(text, style) }
+    }
+
+    private func startRewrite(_ original: String, _ style: RewriteStyle) {
+        setVersion(style, .loading)
+        let gen = aiGen, vietnamese = driver.language == 1, limit = Self.rewriteTimeout
+        aiTasks.append(Task { [weak self] in
+            let r = await AIAssist.withTimeout(limit) { await AIAssist.rewrite(original, style: style, vietnamese: vietnamese) } ?? nil
+            await MainActor.run {
+                guard let self, self.aiGen == gen, !Task.isCancelled else { return }
+                self.setVersion(style, r.map { .done($0) } ?? .failed)
             }
-            return true
-        case .preview:
-            keyboard.suggestions = []
-            return true
-        case .applied(_, let ins, _):
-            if (lastContext ?? "").hasSuffix(String(ins.suffix(100))) { keyboard.suggestions = [Suggestion(text: String(localized: "Hoàn tác"), kind: .undo)]; return true }
-        case .none: break
+        })
+    }
+
+    /// One card's answer, without starting over (the other styles are still coming).
+    private func setVersion(_ style: RewriteStyle, _ v: RewriteVersion) {
+        guard case .picking(let o, var versions) = aiState, versions.indices.contains(style.rawValue) else { return }
+        versions[style.rawValue] = v
+        aiState = .picking(original: o, versions: versions)
+        rewritePanel?.show(versions)
+    }
+
+    /// A tap on a card: a finished version replaces the selection at once (Hieu), a failed one asks again.
+    private func pick(_ style: RewriteStyle) {
+        guard case .picking(let original, let versions) = aiState, versions.indices.contains(style.rawValue) else { return }
+        switch versions[style.rawValue] {
+        case .loading: return
+        case .failed: startRewrite(original, style)
+        case .done(let text):
+            // the selection must still be the text that was rewritten, or it would land somewhere else
+            guard proxy.selectedText == original else { setAI(.none); selection = nil; readSelection(); return }
+            let before = proxy.documentContextBeforeInput ?? "", after = proxy.documentContextAfterInput ?? ""
+            proxy.insertText(text)
+            afterReplace(inserted: text, before: before, after: after)
         }
+    }
+
+    /// Next words in the strip (Apple Intelligence on a selection is on the ✨ key, not here). True when it filled the strip.
+    func showNextWords() -> Bool {
         // next words only at a plain cursor: with text selected, a tap would replace the selection
         if selection == nil, wordPrefix.isEmpty, let before = lastContext, before.hasSuffix(" ") {
             keyboard.suggestions = nextWords(before).map { Suggestion(text: $0, kind: .next) }
@@ -1036,73 +1046,9 @@ extension KeyboardViewController {
         afterEdit(deleted: 0, inserted: text)
     }
 
-    /// Runs `work` for the current state; its answer is used only if the state hasn't moved on.
-    private func ask<T>(_ work: @escaping () async -> T?, then use: @escaping (T?) -> Void) {
-        let gen = aiGen
-        aiSelTask?.cancel()
-        aiSelTask = Task { [weak self] in
-            let r = await AIAssist.withTimeout(15) { await work() } ?? nil
-            await MainActor.run {
-                guard let self, self.aiGen == gen, !Task.isCancelled else { return }
-                use(r)
-            }
-        }
-    }
-
-    private func checkWord(_ word: String) {
-        let before = proxy.documentContextBeforeInput ?? "", after = proxy.documentContextAfterInput ?? ""
-        ask({
-            try? await Task.sleep(nanoseconds: Self.wordCheckDelay)      // the selection handles may still be moving
-            if Task.isCancelled { return nil }
-            return await AIAssist.fixWord(word, before: before, after: after)
-        }) { [weak self] (fixes: [String]?) in
-            guard let fixes else { self?.update(.word(word, .failed)); return }
-            self?.update(.word(word, fixes.isEmpty ? .noMistakes : .fixes(fixes)))
-        }
-    }
-
-    /// ✨ Proofread, or "Couldn't fix · Retry".
-    private func retryOrProofread() {
-        switch aiState {
-        case .word(let w, .failed): update(.word(w, .working)); aiGen += 1; checkWord(w)
-        case .text(let t, .failed): update(.text(t, .ready)); startProofread()
-        default: startProofread()
-        }
-    }
-
-    /// The same state with a new answer, without starting over (no new generation: nothing else is in flight).
-    private func update(_ s: AIState) { aiState = s; scheduleSuggestions() }
-
-    private func startProofread() {
-        guard case .text(let original, .ready) = aiState else { return }
-        update(.text(original, .working))
-        ask({ await AIAssist.proofread(original) }) { [weak self] (fixed: String?) in
-            guard let self else { return }
-            guard let fixed else { self.update(.text(original, .failed)); return }
-            if fixed == original { self.update(.text(original, .noMistakes)); return }
-            self.setAI(.preview(original: original, corrected: fixed))
-        }
-    }
-
-    /// The fixed word replaces the selected one, if that word is still what's selected.
-    private func replaceSelection(with text: String) {
-        guard case .word(let word, _) = aiState, proxy.selectedText == word else { setAI(.none); return }
-        let before = proxy.documentContextBeforeInput ?? "", after = proxy.documentContextAfterInput ?? ""
-        proxy.insertText(text)
-        afterReplace(original: word, inserted: text, before: before, after: after)
-    }
-
-    private func applyProofread() {
-        guard case .preview(let original, let corrected) = aiState else { return }
-        // the selection must still be the text that was proofread, or the fix would land somewhere else
-        guard proxy.selectedText == original else { setAI(.none); selection = nil; readSelection(); return }
-        let before = proxy.documentContextBeforeInput ?? "", after = proxy.documentContextAfterInput ?? ""
-        proxy.insertText(corrected)
-        afterReplace(original: original, inserted: corrected, before: before, after: after)
-    }
-
     /// Our own idea of the text around the cursor after a replace: the app may report the old text for a moment.
-    private func afterReplace(original: String, inserted: String, before: String, after: String) {
+    /// No Undo key after a rewrite (Hieu): ✨ goes, VI/EN is back.
+    private func afterReplace(inserted: String, before: String, after: String) {
         selection = nil; selectionAt = ""
         driver.resetContext()
         clearWord()
@@ -1110,44 +1056,30 @@ extension KeyboardViewController {
         lastAfter = after
         recentContexts = [lastContext ?? ""]
         updateAutoShift(lastContext ?? "")
-        setAI(.applied(original: original, inserted: inserted, after: after))
-    }
-
-    private func undoProofread() {
-        guard case .applied(let original, let inserted, let after) = aiState, undoStillFits() else { setAI(.none); return }
-        let before = String((lastContext ?? "").dropLast(inserted.count))
-        for _ in 0..<inserted.count { proxy.deleteBackward() }
-        proxy.insertText(original)
-        driver.resetContext()
-        clearWord()
-        lastContext = before + original
-        lastAfter = after
-        recentContexts = [lastContext ?? ""]
-        updateAutoShift(lastContext ?? "")
         setAI(.none)
     }
 
-    /// The preview takes the whole keyboard (Tony): the keys hide under it until Apply or Cancel.
-    private func showPreview(original: String, corrected: String) {
-        let panel = proofreadPanel ?? ProofreadPanel()
+    /// The picker takes the whole keyboard (Tony): the keys hide under it until a version is picked or Cancel.
+    private func showPicker(_ versions: [RewriteVersion]) {
+        let panel = rewritePanel ?? RewritePanel()
         panel.dark = keyboard.dark
-        panel.show(original: original, corrected: corrected)
-        panel.onCancel = { [weak self] in      // back to ✨ Proofread for the text that's still selected
+        panel.show(versions)
+        panel.onCancel = { [weak self] in      // back to ✨ for the text that's still selected
             guard let self else { return }
-            if case .preview(let o, _) = self.aiState, self.selection == o { self.setAI(.text(o, .ready)) } else { self.setAI(.none) }
+            if case .picking(let o, _) = self.aiState, self.selection == o { self.setAI(.ready(o)) } else { self.setAI(.none) }
         }
-        panel.onApply = { [weak self] in self?.applyProofread() }
-        if proofreadPanel == nil {
+        panel.onPick = { [weak self] in self?.pick($0) }
+        if rewritePanel == nil {
             panel.frame = view.bounds
             panel.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            view.addSubview(panel); proofreadPanel = panel
+            view.addSubview(panel); rewritePanel = panel
         }
         keyboard.isHidden = true
     }
 
-    private func closePreview() {
-        proofreadPanel?.removeFromSuperview(); proofreadPanel = nil
+    private func closePicker() {
+        rewritePanel?.removeFromSuperview(); rewritePanel = nil
         keyboard.isHidden = false
-        keyboard.ignoreTouches(for: 0.8)      // a double tap on Apply must not land on Return
+        keyboard.ignoreTouches(for: 0.8)      // a double tap on a card must not land on a key
     }
 }

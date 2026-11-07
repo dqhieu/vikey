@@ -355,7 +355,7 @@ final class KeyboardView: UIView {
         case .globe: return (nil, UIImage(systemName: "globe", withConfiguration: sym))
         case .paste: return (nil, UIImage(systemName: "clipboard", withConfiguration: sym))
         case .emoji: return (nil, UIImage(systemName: "face.smiling", withConfiguration: sym))
-        case .language: return (languageShort, nil)
+        case .language: return aiKeyShown ? (nil, UIImage(systemName: "sparkles", withConfiguration: sym)) : (languageShort, nil)
         case .layer(let l): return (l == .letters ? "ABC" : (l == .numbers ? "123" : "#+="), nil)
         }
     }
@@ -430,6 +430,13 @@ final class KeyboardView: UIView {
     static func pressed(_ c: UIColor) -> UIColor { c.withAlphaComponent(c.cgColor.alpha * 0.5) }
     /// The pasteboard has text: the Paste key is tinted (set by the controller).
     var pasteReady = false { didSet { if pasteReady != oldValue { refreshColors() } } }
+    /// The VI/EN key's place while text is selected (Hieu): ✨ rewrites it with Apple Intelligence. VI/EN otherwise.
+    enum AIKey: Equatable { case off, sparkle }
+    var aiKey: AIKey = .off { didSet { if aiKey != oldValue { refreshLabels() } } }
+    /// The bottom-row VI/EN key is showing ✨ (not when VI/EN sits up in the strip's corner): a tap on it is ✨'s.
+    var aiKeyShown: Bool { aiKey != .off && !langTop }
+    /// The ✨ key's colour (Hieu), with a dark symbol: white doesn't read on yellow.
+    static let aiTint: UIColor = .systemYellow
 
     private func refreshColors() {
         bar.dark = dark
@@ -459,6 +466,7 @@ final class KeyboardView: UIView {
                     bg = dark ? UIColor(red: 0.42, green: 0.40, blue: 1, alpha: 1) : UIColor(red: 0.31, green: 0.27, blue: 0.90, alpha: 1)
                     tint = .white
                 } else { tint = brand }
+                if aiKeyShown { bg = Self.aiTint; tint = .black }
             }
             if cursorMode { bg = dark ? UIColor(white: 0.32, alpha: 1) : UIColor(white: 0.93, alpha: 1) }
             v.normalColor = bg
@@ -475,7 +483,7 @@ final class KeyboardView: UIView {
     func capForTests(at p: CGPoint) -> KeyCap? { cap(at: p) }
     private func cap(at p: CGPoint) -> KeyCap? {
         for (_, v) in keys where !v.isHidden && v.frame.insetBy(dx: -3, dy: -5.5).contains(p) { return v }
-        // the strip is not a key: a tap on a note there ("Fixing…", "No mistakes") must never type the letter below
+        // the strip is not a key: a tap on it must never type the letter below
         if !bar.isHidden, p.y < bar.frame.maxY { return nil }
         var best: KeyCap?; var bestD = CGFloat.greatestFiniteMagnitude
         for (_, v) in keys where !v.isHidden {
@@ -512,7 +520,7 @@ final class KeyboardView: UIView {
     }
     private func release(_ c: KeyCap) { c.fill = c.normalColor }
 
-    /// Taps right after the keys come back (the proofread preview closed) are the second half of a double tap.
+    /// Taps right after the keys come back (the ✨ picker closed) are the second half of a double tap.
     func ignoreTouches(for seconds: Double) { quietUntil = CACurrentMediaTime() + seconds }
     private var quietUntil: CFTimeInterval = 0
 
@@ -863,11 +871,11 @@ final class AlternatesView: UIView {
 
 /// One cell of the suggestion strip.
 struct Suggestion: Equatable {
-    enum Kind: Equatable { case word, next, proofread, alternative, undo, busy }
+    enum Kind: Equatable { case word, next }
     var text: String
     var quoted = false        // the word as typed, when something else is offered
     var highlighted = false   // what the space bar will put in (auto-correct)
-    var kind: Kind = .word    // next word, ✨ proofread, another word for a selection, undo, or a "working…" note
+    var kind: Kind = .word    // a word being typed, or the next word
 }
 
 /// The strip above the keys: up to three words, like the system keyboard's.
@@ -930,19 +938,12 @@ final class SuggestionBar: UIView {
         mark.isHidden = !items.isEmpty || !showsBrand   // only on an empty strip
         for (i, b) in cells.enumerated() {
             let it = i < items.count ? items[i] : nil
-            let title: String? = it.map {
-                switch $0.kind {
-                case .proofread: return "✨ " + $0.text
-                case .undo: return "↩︎ " + $0.text
-                default: return $0.quoted ? "\u{201C}\($0.text)\u{201D}" : $0.text
-                }
-            }
+            let title: String? = it.map { $0.quoted ? "\u{201C}\($0.text)\u{201D}" : $0.text }
             b.setTitle(title, for: .normal)
-            let brand: UIColor = dark ? UIColor(red: 0.62, green: 0.60, blue: 1, alpha: 1) : UIColor(red: 0.31, green: 0.27, blue: 0.90, alpha: 1)
-            b.setTitleColor(it?.kind == .busy ? fg.withAlphaComponent(0.45) : it?.kind == .proofread || it?.kind == .undo ? brand : fg, for: .normal)
-            b.titleLabel?.font = .systemFont(ofSize: 17, weight: it?.kind == .proofread ? .semibold : .regular)
+            b.setTitleColor(fg, for: .normal)
+            b.titleLabel?.font = .systemFont(ofSize: 17, weight: .regular)
             b.backgroundColor = it?.highlighted == true ? (dark ? UIColor(white: 0.42, alpha: 1) : .white) : .clear
-            b.isEnabled = it != nil && it?.kind != .busy
+            b.isEnabled = it != nil
         }
         for (i, l) in lines.enumerated() {
             l.backgroundColor = fg.withAlphaComponent(0.18)
@@ -959,13 +960,6 @@ final class SuggestionBar: UIView {
         mark.frame = CGRect(x: bounds.width - 14 - mw, y: (bounds.height - iconSide) / 2, width: mw, height: iconSide)
         markIcon.frame = CGRect(x: 0, y: 0, width: iconSide, height: iconSide)
         markText.frame = CGRect(x: iconSide + gap, y: (iconSide - markText.bounds.height) / 2, width: markText.bounds.width, height: markText.bounds.height)
-        // one wide cell for a single action (✨ Proofread, ↩︎ Undo, "working…"); three otherwise
-        if items.count == 1, items[0].kind != .word, items[0].kind != .next {
-            cells[0].frame = bounds.insetBy(dx: 2, dy: 2)
-            for b in cells.dropFirst() { b.frame = .zero }
-            lines.forEach { $0.isHidden = true }
-            return
-        }
         let w = bounds.width / 3
         for (i, b) in cells.enumerated() { b.frame = CGRect(x: CGFloat(i) * w + 2, y: 2, width: w - 4, height: bounds.height - 4) }
         for (i, l) in lines.enumerated() { l.frame = CGRect(x: CGFloat(i + 1) * w - 0.5, y: bounds.height * 0.28, width: 1, height: bounds.height * 0.44) }

@@ -69,19 +69,19 @@
         }
       }
     },
-    "Cuốn hút" : {
+    "Tự nhiên" : {
       "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Engaging"
+            "value" : "Natural"
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cuốn hút"
+            "value" : "Tự nhiên"
           }
         }
       }

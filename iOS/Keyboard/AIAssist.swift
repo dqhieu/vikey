@@ -94,12 +94,12 @@ enum AIAssist {
 
 /// The three ✨ styles, in the picker's order (Hieu).
 enum RewriteStyle: Int, CaseIterable {
-    case polished, funny, engaging
+    case polished, funny, natural
     var title: String {
         switch self {
         case .polished: return String(localized: "Chỉn chu")
         case .funny: return String(localized: "Hài hước")
-        case .engaging: return String(localized: "Cuốn hút")
+        case .natural: return String(localized: "Tự nhiên")
         }
     }
 }
@@ -124,9 +124,16 @@ private enum Impl {
         case .funny:
             how = "funny and playful: the same message with a light, witty twist (playful wording, a pun or a small joke) " +
                 "that still says the same thing and stays kind, never mean. You may add one to three fitting emoji"
-        case .engaging:
-            how = "catchy, like a social media post or caption: open with a short hook, use short punchy wording, and keep " +
-                "it the same message. You may add one to three fitting emoji. Add hashtags only if the text already has some"
+        case .natural:
+            how = "a natural social post or reply: short, casual and conversational, like a real person posting, not a brand " +
+                "or a copywriter. Keep the writer's meaning, personality and level of enthusiasm, and fix awkward wording " +
+                "without rewriting more than needed. Use natural wording, never a literal translation. Prefer simple, " +
+                "specific words over clever lines, slogans, hype, forced jokes, marketing fluff or inspirational lines; " +
+                "nothing should sound written by an AI. Use no em dashes: normal punctuation and contractions. Add an emoji " +
+                "only when one really fits, never several. Don't explain what a photo or video would already show. A post " +
+                "about a product sounds like an indie developer sharing what they built, not an ad; a travel or personal " +
+                "post stays understated, not poetic. Add no feelings or context the writer didn't give. If the text " +
+                "already works, give it back as it is"
         }
         let lang = vietnamese
             ? "Write it in Vietnamese, with full diacritics. If the text is in another language, translate it into Vietnamese. Vietnamese words typed without accents are Vietnamese: add the accents."
@@ -180,7 +187,7 @@ enum RewriteCheck {
         var t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         for m in ["<<<", ">>>"] { t = t.replacingOccurrences(of: m, with: "") }
         // a chatty lead-in ("Here is the rewritten text:", "Funny version:") the original didn't start with
-        let lead = #"^(sure|okay|ok|here|rewritten|rewrite|polished|funny|catchy|engaging|version|bản|đây)[^:\n]{0,60}:\s*"#
+        let lead = #"^(sure|okay|ok|here|rewritten|rewrite|polished|funny|natural|catchy|engaging|version|bản|đây)[^:\n]{0,60}:\s*"#
         if let r = t.range(of: lead, options: [.regularExpression, .caseInsensitive]),
            !original.lowercased().hasPrefix(String(t[r]).lowercased()) { t = String(t[r.upperBound...]) }
         t = t.trimmingCharacters(in: .whitespacesAndNewlines)

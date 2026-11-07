@@ -2,7 +2,7 @@ import XCTest
 import UIKit
 
 /// Next words (the table, Apple Intelligence on top); ✨ on the VI/EN key's place rewrites a selection Polished,
-/// Funny and Engaging in a picker, and a tap on a version puts it in. The model is stubbed: these test the keyboard's
+/// Funny and Natural in a picker, and a tap on a version puts it in. The model is stubbed: these test the keyboard's
 /// flow, not Apple's answers.
 final class AIAssistFlowTests: XCTestCase {
     private let sender = KeyboardView()
@@ -40,7 +40,7 @@ final class AIAssistFlowTests: XCTestCase {
         p.cursor = p.text.distance(from: p.text.startIndex, to: r.lowerBound); p.selection = part.count
         vc.selectionDidChange(nil)
     }
-    /// A stub that answers each style with its name in front: "polished …", "funny …", "engaging …".
+    /// A stub that answers each style with its name in front: "polished …", "funny …", "natural …".
     private func tagged() -> AIAssist.Stub { .init(rewrite: { t, s, _ in "\(s) \(t)" }) }
 
     // the table
@@ -75,7 +75,7 @@ final class AIAssistFlowTests: XCTestCase {
         XCTAssertNotNil(vc.rewritePanelForTests, "the picker opens at once")
         XCTAssertTrue(vc.keyboardViewForTests.isHidden, "over the whole keyboard")
         settle { self.allIn(vc) }
-        XCTAssertEqual(versions(vc), [.done("polished can u send me the file"), .done("funny can u send me the file"), .done("engaging can u send me the file")])
+        XCTAssertEqual(versions(vc), [.done("polished can u send me the file"), .done("funny can u send me the file"), .done("natural can u send me the file")])
         XCTAssertEqual(p.text, "can u send me the file", "nothing changes before a tap")
         vc.rewritePanelForTests?.onPick?(.funny)
         XCTAssertEqual(p.text, "funny can u send me the file")
@@ -136,14 +136,14 @@ final class AIAssistFlowTests: XCTestCase {
         vc.rewritePanelForTests?.onToggleLanguage?()
         XCTAssertEqual(vc.rewritePanelForTests?.vietnamese, true)
         settle { self.allIn(vc) && self.versions(vc).first != .done("polished en see you soon") }
-        XCTAssertEqual(versions(vc), [.done("polished vi see you soon"), .done("funny vi see you soon"), .done("engaging vi see you soon")])
+        XCTAssertEqual(versions(vc), [.done("polished vi see you soon"), .done("funny vi see you soon"), .done("natural vi see you soon")])
         vc.rewritePanelForTests?.onPick?(.funny)
         XCTAssertEqual(p.text, "funny vi see you soon")
     }
 
     func testAFailedVersionSaysSoAndATapAsksAgain() {
-        var engagingWorks = false
-        AIAssist.stub = .init(rewrite: { t, s, _ in s == .engaging && !engagingWorks ? nil : "\(s) \(t)" })
+        var naturalWorks = false
+        AIAssist.stub = .init(rewrite: { t, s, _ in s == .natural && !naturalWorks ? nil : "\(s) \(t)" })
         let (vc, p) = make()
         p.text = "we was late today"; p.cursor = 0
         select(p, vc, p.text)
@@ -152,10 +152,10 @@ final class AIAssistFlowTests: XCTestCase {
         settle { self.allIn(vc) }
         XCTAssertEqual(versions(vc)[2], .failed)
         XCTAssertEqual(versions(vc)[0], .done("polished we was late today"), "the others still come")
-        engagingWorks = true
-        vc.rewritePanelForTests?.onPick?(.engaging)                    // retry
+        naturalWorks = true
+        vc.rewritePanelForTests?.onPick?(.natural)                    // retry
         settle { self.versions(vc)[2] != .failed && self.versions(vc)[2] != .loading }
-        XCTAssertEqual(versions(vc)[2], .done("engaging we was late today"))
+        XCTAssertEqual(versions(vc)[2], .done("natural we was late today"))
         XCTAssertEqual(p.text, "we was late today", "a retry doesn't put it in")
     }
 

@@ -120,5 +120,7 @@ schemes:
     build:
       targets:
         Vikey: all
+    run:
+      debugEnabled: false   # "Debug executable" off: launches run without LLDB attached
     test:
       targets: [VikeyTests]

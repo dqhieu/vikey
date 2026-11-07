@@ -48,6 +48,22 @@
         }
       }
     },
+    "✨ Viết lại với Claude" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "✨ Rewrite with Claude"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "✨ Viết lại với Claude"
+          }
+        }
+      }
+    },
     "Ẩn bàn phím" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -266,6 +282,22 @@
         }
       }
     },
+    "Chọn một đoạn chữ rồi chạm ✨ trên bàn phím để có ba bản: sửa lỗi, theo giọng của bạn, và tự nhiên. Đoạn chữ được gửi tới Claude Haiku của Anthropic bằng khoá API của bạn (console.anthropic.com), và tính phí vào tài khoản đó. Cần bật Cho phép Truy cập đầy đủ." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select some text and tap ✨ on the keyboard for three versions: proofread, in your voice, and natural. The text is sent to Anthropic's Claude Haiku with your API key (console.anthropic.com) and billed to that account. Needs Allow Full Access."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chọn một đoạn chữ rồi chạm ✨ trên bàn phím để có ba bản: sửa lỗi, theo giọng của bạn, và tự nhiên. Đoạn chữ được gửi tới Claude Haiku của Anthropic bằng khoá API của bạn (console.anthropic.com), và tính phí vào tài khoản đó. Cần bật Cho phép Truy cập đầy đủ."
+          }
+        }
+      }
+    },
     "Chữ đầu tiên của câu được viết hoa, như bàn phím của iPhone." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -313,6 +345,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Đã thêm Vikey"
+          }
+        }
+      }
+    },
+    "Đang kiểm tra…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking…"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đang kiểm tra…"
           }
         }
       }
@@ -667,6 +715,91 @@
         }
       }
     },
+    "Khoá API" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API key"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khoá API"
+          }
+        }
+      }
+    },
+    "Khoá dùng được" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Key works"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khoá dùng được"
+          }
+        }
+      }
+    },
+    "Khoá không đúng hoặc đã bị thu hồi" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The key is wrong or was revoked"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khoá không đúng hoặc đã bị thu hồi"
+          }
+        }
+      }
+    },
+    "Không kết nối được. Kiểm tra mạng rồi thử lại." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't connect. Check your connection and try again."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không kết nối được. Kiểm tra mạng rồi thử lại."
+          }
+        }
+      }
+    },
+    "Không kiểm tra được khoá" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't check the key"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không kiểm tra được khoá"
+          }
+        }
+      }
+    },
     "Kiểm tra chính tả" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -684,6 +817,23 @@
         }
       }
     },
+    "Kiểm tra khoá" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check key"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kiểm tra khoá"
+          }
+        }
+      }
+    },
     "Kiểu gõ" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -697,6 +847,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kiểu gõ"
+          }
+        }
+      }
+    },
+    "Lưu khoá" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save key"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lưu khoá"
           }
         }
       }
@@ -837,19 +1004,19 @@
         }
       }
     },
-    "Rung nhẹ mỗi khi chạm phím, như bàn phím của iPhone. Cần bật Cho phép Truy cập đầy đủ: Cài đặt › Vikey › Bàn phím. Vikey chỉ dùng quyền này để rung." : {
+    "Rung nhẹ mỗi khi chạm phím, như bàn phím của iPhone. Cần bật Cho phép Truy cập đầy đủ: Cài đặt › Vikey › Bàn phím. Vikey chỉ dùng quyền này để rung, và để ✨ gửi đoạn chữ bạn chọn tới Claude." : {
       "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "A light tap on every key, like the iPhone keyboard. Needs Allow Full Access: Settings › Vikey › Keyboards. Vikey only uses it for haptics."
+            "value" : "A light tap with each key press, like the iPhone keyboard. Needs Allow Full Access: Settings › Vikey › Keyboards. Vikey uses it only for this, and for ✨ to send the text you select to Claude."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Rung nhẹ mỗi khi chạm phím, như bàn phím của iPhone. Cần bật Cho phép Truy cập đầy đủ: Cài đặt › Vikey › Bàn phím. Vikey chỉ dùng quyền này để rung."
+            "value" : "Rung nhẹ mỗi khi chạm phím, như bàn phím của iPhone. Cần bật Cho phép Truy cập đầy đủ: Cài đặt › Vikey › Bàn phím. Vikey chỉ dùng quyền này để rung, và để ✨ gửi đoạn chữ bạn chọn tới Claude."
           }
         }
       }
@@ -1191,18 +1358,18 @@
         }
       }
     },
-    "Vikey chỉ dùng Truy cập đầy đủ để rung khi gõ phím. Những gì bạn gõ không rời khỏi máy, trừ đoạn chữ bạn chọn rồi chạm ✨ để viết lại: đoạn đó có thể được gửi tới Private Cloud Compute của Apple để xử lý, không được lưu lại và không ai xem được." : {
+    "Vikey chỉ dùng Truy cập đầy đủ để rung khi gõ phím và cho ✨. Những gì bạn gõ không rời khỏi máy, trừ đoạn chữ bạn chọn rồi chạm ✨ để viết lại: đoạn đó được gửi tới Claude của Anthropic bằng khoá API bạn nhập trong ứng dụng." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Vikey only uses Full Access for haptics. What you type stays on your phone, except text you select and tap ✨ to rewrite: that may be sent to Apple's Private Cloud Compute, which doesn't keep it and no one can see it."
+            "value" : "Vikey uses Full Access only for haptics and for ✨. What you type never leaves your iPhone, except text you select and tap ✨ to rewrite: that is sent to Anthropic's Claude with the API key you enter in the app."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Vikey chỉ dùng Truy cập đầy đủ để rung khi gõ phím. Những gì bạn gõ không rời khỏi máy, trừ đoạn chữ bạn chọn rồi chạm ✨ để viết lại: đoạn đó có thể được gửi tới Private Cloud Compute của Apple để xử lý, không được lưu lại và không ai xem được."
+            "value" : "Vikey chỉ dùng Truy cập đầy đủ để rung khi gõ phím và cho ✨. Những gì bạn gõ không rời khỏi máy, trừ đoạn chữ bạn chọn rồi chạm ✨ để viết lại: đoạn đó được gửi tới Claude của Anthropic bằng khoá API bạn nhập trong ứng dụng."
           }
         }
       }
@@ -1273,6 +1440,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Xem lại hướng dẫn"
+          }
+        }
+      }
+    },
+    "Xoá khoá" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove key"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xoá khoá"
           }
         }
       }

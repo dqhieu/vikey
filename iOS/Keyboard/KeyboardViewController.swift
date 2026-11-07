@@ -14,7 +14,7 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
     func setLanguageForTests(_ l: Int) { driver.language = l; driver.resetContext() }
     private var heightConstraint: NSLayoutConstraint?
     private var emojiView: EmojiKeyboardView?
-    // Apple Intelligence on a selection (AIAssist): one state, replaced whenever the selection changes, so nothing
+    // ✨ rewrite on a selection (AIAssist): one state, replaced whenever the selection changes, so nothing
     // from an earlier selection (the picker, its versions) can outlive it. `aiGen` tags each request; an answer for
     // an older state is dropped.
     enum AIState: Equatable {
@@ -27,7 +27,7 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
     private var aiTasks: [Task<Void, Never>] = []
     /// The picker's language: VI/EN's when ✨ is tapped, then its own VI | EN (the keys' VI/EN stays as it was).
     private var rewriteVietnamese = true
-    /// How long one style may take before its card says it failed (the three may queue up for the model).
+    /// How long one style may take before its card says it failed.
     static var rewriteTimeout: Double = 30
     private var aiNext: [String] = [], aiNextFor = ""
     private var aiNextTask: Task<Void, Never>?
@@ -116,7 +116,7 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         setAI(.none); selection = nil
-        AIAssist.refresh()   // off the main thread: whether the model is there
+        AIAssist.refresh(fullAccess: hasFullAccess)   // off the main thread: Apple's model, the saved Claude key
         refreshPasteReady()
         keyboard.animatesLanguage = false   // the pill takes the saved language without rolling while the keyboard comes up
         comingUp = true
@@ -919,7 +919,7 @@ extension KeyboardViewController: EmojiKeyboardDelegate {
     }
 }
 
-// MARK: Apple Intelligence and next words
+// MARK: ✨ rewrite and next words
 
 extension KeyboardViewController {
     /// Moves to a new state: drops answers still coming for the old one, opens or closes the picker, redraws the strip.
@@ -997,13 +997,15 @@ extension KeyboardViewController {
         rewritePanel?.show(versions)
     }
 
-    /// A tap on a card: a finished version replaces the selection at once (Hieu), a failed one asks again.
-    private func pick(_ style: RewriteStyle) {
+    /// A tap on a card: a finished version (or its alternative) replaces the selection at once (Hieu), a failed one
+    /// asks again.
+    private func pick(_ style: RewriteStyle, alternative: Bool = false) {
         guard case .picking(let original, let versions) = aiState, versions.indices.contains(style.rawValue) else { return }
         switch versions[style.rawValue] {
         case .loading: return
         case .failed: startRewrite(original, style)
-        case .done(let text):
+        case .done(let r):
+            guard let text = alternative ? r.alternative : r.text else { return }
             // the selection must still be the text that was rewritten, or it would land somewhere else
             guard proxy.selectedText == original else { setAI(.none); selection = nil; readSelection(); return }
             let before = proxy.documentContextBeforeInput ?? "", after = proxy.documentContextAfterInput ?? ""
@@ -1012,7 +1014,7 @@ extension KeyboardViewController {
         }
     }
 
-    /// Next words in the strip (Apple Intelligence on a selection is on the ✨ key, not here). True when it filled the strip.
+    /// Next words in the strip (a rewrite of a selection is on the ✨ key, not here). True when it filled the strip.
     func showNextWords() -> Bool {
         // next words only at a plain cursor: with text selected, a tap would replace the selection
         if selection == nil, wordPrefix.isEmpty, let before = lastContext, before.hasSuffix(" ") {
@@ -1077,6 +1079,7 @@ extension KeyboardViewController {
         let panel = rewritePanel ?? RewritePanel()
         panel.dark = keyboard.dark
         panel.vietnamese = rewriteVietnamese
+        if case .picking(let o, _) = aiState { panel.original = o }
         panel.show(versions)
         panel.onToggleLanguage = { [weak self] in self?.toggleRewriteLanguage() }
         panel.onCancel = { [weak self] in      // back to ✨ for the text that's still selected
@@ -1084,6 +1087,7 @@ extension KeyboardViewController {
             if case .picking(let o, _) = self.aiState, self.selection == o { self.setAI(.ready(o)) } else { self.setAI(.none) }
         }
         panel.onPick = { [weak self] in self?.pick($0) }
+        panel.onPickAlternative = { [weak self] in self?.pick($0, alternative: true) }
         if rewritePanel == nil {
             panel.frame = view.bounds
             panel.autoresizingMask = [.flexibleWidth, .flexibleHeight]

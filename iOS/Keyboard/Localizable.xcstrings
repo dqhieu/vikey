@@ -35,6 +35,23 @@
         }
       }
     },
+    "bản khác" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "alternative"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "bản khác"
+          }
+        }
+      }
+    },
     "Chỉ đường" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -48,40 +65,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Chỉ đường"
-          }
-        }
-      }
-    },
-    "Chỉn chu" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Polished"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Chỉn chu"
-          }
-        }
-      }
-    },
-    "Tự nhiên" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Natural"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tự nhiên"
           }
         }
       }
@@ -171,6 +154,23 @@
         }
       }
     },
+    "Giọng của tôi" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My voice"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Giọng của tôi"
+          }
+        }
+      }
+    },
     "Gõ để xem thông số" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -201,23 +201,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gửi"
-          }
-        }
-      }
-    },
-    "Hài hước" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Funny"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hài hước"
           }
         }
       }
@@ -422,6 +405,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tìm"
+          }
+        }
+      }
+    },
+    "Tự nhiên" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Natural"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tự nhiên"
           }
         }
       }

@@ -23,6 +23,7 @@ targets:
       - path: App
       - path: Shared/VKSettings.swift
       - path: Shared/KBLog.swift
+      - path: Shared/Claude.swift
       - path: ../App/Model/Acknowledgements.swift
       - path: ../App/Model/Brand.swift
     dependencies:
@@ -85,7 +86,6 @@ targets:
       path: Keyboard/VikeyKeyboard.entitlements
       properties:
         com.apple.security.application-groups: [group.com.hieudinh.vikey]
-        com.apple.developer.private-cloud-compute: true   # ✨ rewrites (managed entitlement on the keyboard's App ID)
     settings:
       base:
         PRODUCT_NAME: VikeyKeyboard

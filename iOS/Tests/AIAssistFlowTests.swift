@@ -1,9 +1,9 @@
 import XCTest
 import UIKit
 
-/// Next words (the table, Apple Intelligence on top); ✨ on the VI/EN key's place rewrites a selection Polished,
-/// Funny and Natural in a picker, and a tap on a version puts it in. The model is stubbed: these test the keyboard's
-/// flow, not Apple's answers.
+/// Next words (the table, Apple Intelligence on top); ✨ on the VI/EN key's place rewrites a selection proofread,
+/// in Hieu's voice and Natural in a picker, and a tap on a version puts it in. The model is stubbed: these test the keyboard's
+/// flow, not Claude's answers.
 final class AIAssistFlowTests: XCTestCase {
     private let sender = KeyboardView()
 
@@ -40,7 +40,7 @@ final class AIAssistFlowTests: XCTestCase {
         p.cursor = p.text.distance(from: p.text.startIndex, to: r.lowerBound); p.selection = part.count
         vc.selectionDidChange(nil)
     }
-    /// A stub that answers each style with its name in front: "polished …", "funny …", "natural …".
+    /// A stub that answers each style with its name in front: "proofread …", "voice …", "natural …".
     private func tagged() -> AIAssist.Stub { .init(rewrite: { t, s, _ in "\(s) \(t)" }) }
 
     // the table
@@ -75,10 +75,10 @@ final class AIAssistFlowTests: XCTestCase {
         XCTAssertNotNil(vc.rewritePanelForTests, "the picker opens at once")
         XCTAssertTrue(vc.keyboardViewForTests.isHidden, "over the whole keyboard")
         settle { self.allIn(vc) }
-        XCTAssertEqual(versions(vc), [.done("polished can u send me the file"), .done("funny can u send me the file"), .done("natural can u send me the file")])
+        XCTAssertEqual(versions(vc), [.done("proofread can u send me the file"), .done("voice can u send me the file"), .done("natural can u send me the file")])
         XCTAssertEqual(p.text, "can u send me the file", "nothing changes before a tap")
-        vc.rewritePanelForTests?.onPick?(.funny)
-        XCTAssertEqual(p.text, "funny can u send me the file")
+        vc.rewritePanelForTests?.onPick?(.voice)
+        XCTAssertEqual(p.text, "voice can u send me the file")
         XCTAssertNil(vc.rewritePanelForTests)
         XCTAssertFalse(vc.keyboardViewForTests.isHidden)
         settle()
@@ -86,10 +86,53 @@ final class AIAssistFlowTests: XCTestCase {
         XCTAssertEqual(vc.aiStateForTests, .none)
     }
 
+    /// Natural's alternative is its own card, and a tap on it puts it in.
+    func testTheAlternativeCanBePicked() {
+        AIAssist.stub = .init(rewriteFull: { t, s, _ in
+            s == .natural ? Rewrite(text: "natural \(t)", alternative: "punchy \(t)") : Rewrite(text: "\(s) \(t)")
+        })
+        let (vc, p) = make()
+        p.text = "can u send me the file"; p.cursor = 0
+        select(p, vc, p.text)
+        settle { self.key(vc) == .sparkle }
+        tapAI(vc)
+        settle { self.allIn(vc) }
+        XCTAssertEqual(versions(vc)[RewriteStyle.natural.rawValue],
+                       .done(Rewrite(text: "natural can u send me the file", alternative: "punchy can u send me the file")))
+        vc.rewritePanelForTests?.onPickAlternative?(.natural)
+        XCTAssertEqual(p.text, "punchy can u send me the file", "the alternative")
+        XCTAssertNil(vc.rewritePanelForTests)
+    }
+
+    /// The proofread card marks what changed: removed words struck through, added ones highlighted.
+    func testProofreadDiff() {
+        typealias P = RewriteDiff.Part
+        XCTAssertEqual(RewriteDiff.parts("can u send me the file", "Can you send me the file."),
+                       [P.removed("can u"), .added("Can you"), .same(" send me the file"), .added(".")])
+        XCTAssertEqual(RewriteDiff.parts("toi di hoc", "tôi đi học"), [P.removed("toi di hoc"), .added("tôi đi học")])
+        XCTAssertEqual(RewriteDiff.parts("send file", "send the file"), [P.same("send "), .added("the "), .same("file")])
+        XCTAssertEqual(RewriteDiff.parts("All good.", "All good."), [P.same("All good.")])
+        let a = RewriteDiff.attributed("can u go", "can you go", font: .systemFont(ofSize: 17), fg: .black, dark: false)
+        XCTAssertEqual(a.string, "can u you go", "the removed word, a space, then the added one")
+        XCTAssertNotNil(a.attribute(.strikethroughStyle, at: 4, effectiveRange: nil), "u struck through")
+        XCTAssertNotNil(a.attribute(.backgroundColor, at: 6, effectiveRange: nil), "you highlighted")
+    }
+
+    /// No style is tied to a language and no explanation is asked for: VI | EN alone decides the language.
+    func testPromptsFollowTheLanguageToggleOnly() {
+        for style in RewriteStyle.allCases {
+            let vi = ClaudeRewrite.system(style, vietnamese: true), en = ClaudeRewrite.system(style, vietnamese: false)
+            XCTAssertFalse(en.contains("Vietnamese"), "\(style)")
+            XCTAssertFalse(vi.contains("in English."), "\(style)")
+            XCTAssertFalse(vi.lowercased().contains("explain") && !vi.contains("no explanation"), "\(style)")
+            XCTAssertFalse(vi.contains("\"note\""), "\(style)")
+        }
+    }
+
     func testVersionsFillInOneByOne() {
         let gate = DispatchSemaphore(value: 0)
         AIAssist.stub = .init(rewrite: { t, s, _ in
-            if s == .funny { _ = gate.wait(timeout: .now() + 5) }   // funny comes late
+            if s == .voice { _ = gate.wait(timeout: .now() + 5) }   // voice comes late
             return "\(s) \(t)"
         })
         let (vc, p) = make()
@@ -99,12 +142,12 @@ final class AIAssistFlowTests: XCTestCase {
         tapAI(vc)
         settle { self.versions(vc).first != .loading && self.versions(vc).last != .loading }
         XCTAssertEqual(versions(vc)[1], .loading, "still coming")
-        vc.rewritePanelForTests?.onPick?(.funny)                     // a loading card does nothing
+        vc.rewritePanelForTests?.onPick?(.voice)                     // a loading card does nothing
         XCTAssertEqual(p.text, "see you soon")
         XCTAssertNotNil(vc.rewritePanelForTests)
         gate.signal()
         settle { self.allIn(vc) }
-        XCTAssertEqual(versions(vc)[1], .done("funny see you soon"))
+        XCTAssertEqual(versions(vc)[1], .done("voice see you soon"))
     }
 
     func testCancelKeepsTheTextAndGoesBackToSparkle() {
@@ -131,14 +174,14 @@ final class AIAssistFlowTests: XCTestCase {
         settle { self.key(vc) == .sparkle }
         tapAI(vc)
         settle { self.allIn(vc) }
-        XCTAssertEqual(versions(vc).first, .done("polished en see you soon"), "VI/EN's language first")
+        XCTAssertEqual(versions(vc).first, .done("proofread en see you soon"), "VI/EN's language first")
         XCTAssertEqual(vc.rewritePanelForTests?.vietnamese, false)
         vc.rewritePanelForTests?.onToggleLanguage?()
         XCTAssertEqual(vc.rewritePanelForTests?.vietnamese, true)
-        settle { self.allIn(vc) && self.versions(vc).first != .done("polished en see you soon") }
-        XCTAssertEqual(versions(vc), [.done("polished vi see you soon"), .done("funny vi see you soon"), .done("natural vi see you soon")])
-        vc.rewritePanelForTests?.onPick?(.funny)
-        XCTAssertEqual(p.text, "funny vi see you soon")
+        settle { self.allIn(vc) && self.versions(vc).first != .done("proofread en see you soon") }
+        XCTAssertEqual(versions(vc), [.done("proofread vi see you soon"), .done("voice vi see you soon"), .done("natural vi see you soon")])
+        vc.rewritePanelForTests?.onPick?(.voice)
+        XCTAssertEqual(p.text, "voice vi see you soon")
     }
 
     func testAFailedVersionSaysSoAndATapAsksAgain() {
@@ -151,7 +194,7 @@ final class AIAssistFlowTests: XCTestCase {
         tapAI(vc)
         settle { self.allIn(vc) }
         XCTAssertEqual(versions(vc)[2], .failed)
-        XCTAssertEqual(versions(vc)[0], .done("polished we was late today"), "the others still come")
+        XCTAssertEqual(versions(vc)[0], .done("proofread we was late today"), "the others still come")
         naturalWorks = true
         vc.rewritePanelForTests?.onPick?(.natural)                    // retry
         settle { self.versions(vc)[2] != .failed && self.versions(vc)[2] != .loading }
@@ -160,7 +203,7 @@ final class AIAssistFlowTests: XCTestCase {
     }
 
     func testChattyAnswersAreRejected() {
-        AIAssist.stub = .init(rewrite: { _, s, _ in s == .polished ? "Sure! I'd love to help. What would you like me to write?" : "Hey, the meeting moved to 3pm." })
+        AIAssist.stub = .init(rewrite: { _, s, _ in s == .proofread ? "Sure! I'd love to help. What would you like me to write?" : "Hey, the meeting moved to 3pm." })
         let (vc, p) = make()
         p.text = "the meeting is moved to 3pm"; p.cursor = 0
         select(p, vc, p.text)
@@ -201,7 +244,7 @@ final class AIAssistFlowTests: XCTestCase {
         settle { self.key(vc) == .sparkle }
         tapAI(vc)
         settle { self.allIn(vc) }
-        vc.rewritePanelForTests?.onPick?(.polished)
+        vc.rewritePanelForTests?.onPick?(.proofread)
         XCTAssertEqual(p.text, "a  Hello world. \nb", "the spaces around it stay")
     }
 
@@ -233,7 +276,7 @@ final class AIAssistFlowTests: XCTestCase {
         settle { self.key(vc) == .sparkle }
         tapAI(vc)
         settle { self.allIn(vc) }
-        vc.rewritePanelForTests?.onPick?(.polished)
+        vc.rewritePanelForTests?.onPick?(.proofread)
         XCTAssertEqual(p.text, "Line one.\nLine two.")
         p.text = String(repeating: "some words here ", count: 200); p.cursor = 0
         select(p, vc, p.text)
@@ -317,7 +360,7 @@ final class AIAssistFlowTests: XCTestCase {
         tapAI(vc)
         settle { self.allIn(vc) }
         p.selection = 0; p.cursor = 3            // the user moved away meanwhile
-        vc.rewritePanelForTests?.onPick?(.polished)
+        vc.rewritePanelForTests?.onPick?(.proofread)
         XCTAssertEqual(p.text, "two wrds", "never replaces the wrong text")
     }
 
@@ -346,7 +389,7 @@ final class AIAssistFlowTests: XCTestCase {
     }
 
     func testNoNextWordsWhileTextIsSelected() {
-        let (vc, p) = make()                                       // no Apple Intelligence (no stub)
+        let (vc, p) = make()                                       // no Claude key (no stub)
         p.text = "hello there and more"; p.cursor = 6
         select(p, vc, "there and")
         settle()

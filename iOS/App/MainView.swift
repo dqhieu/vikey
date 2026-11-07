@@ -91,9 +91,10 @@ struct MainView: View {
                     Toggle(isOn: $suggestions) { Tip("Gợi ý từ", "Hiện các từ gợi ý phía trên bàn phím, cả tiếng Việt lẫn tiếng Anh. Chạm vào một từ để dùng nó.") }
                     Toggle(isOn: $autoCorrect) { Tip("Tự sửa lỗi gõ", "Khi bạn chạm lệch phím (\"teh\" thay vì \"the\"), Vikey sửa từ đó khi bạn bấm phím cách. Bấm xoá ngay sau đó để giữ lại từ bạn gõ.") }
                     Toggle(isOn: $autoCap) { Tip("Tự viết hoa", "Chữ đầu tiên của câu được viết hoa, như bàn phím của iPhone.") }
-                    Toggle(isOn: $haptics) { Tip("Rung khi gõ", "Rung nhẹ mỗi khi chạm phím, như bàn phím của iPhone. Cần bật Cho phép Truy cập đầy đủ: Cài đặt › Vikey › Bàn phím. Vikey chỉ dùng quyền này để rung.") }
+                    Toggle(isOn: $haptics) { Tip("Rung khi gõ", "Rung nhẹ mỗi khi chạm phím, như bàn phím của iPhone. Cần bật Cho phép Truy cập đầy đủ: Cài đặt › Vikey › Bàn phím. Vikey chỉ dùng quyền này để rung, và để ✨ gửi đoạn chữ bạn chọn tới Claude.") }
                     Toggle(isOn: $doubleSpace) { Tip("Phím tắt dấu chấm", "Chạm nhanh hai lần phím cách để thêm dấu chấm và một khoảng trắng.") }
                 }
+                ClaudeKeySection()
                 Section {
                     Toggle(isOn: $diagnostics) { Tip("Hiện thông số", "Phía trên các phím hiện thời gian xử lý mỗi lần chạm, số lần rung và số lần chạm iOS gửi tới, và ghi vào nhật ký. Nhật ký không chứa chữ bạn gõ, chỉ có thời gian và loại phím (chữ, dấu cách, xoá…). Cần Truy cập đầy đủ để bàn phím ghi được nhật ký.") }
                     if diagnostics {
@@ -162,6 +163,61 @@ struct Tip: View {
                     Text(tip).font(.callout).padding().frame(width: 280).fixedSize(horizontal: false, vertical: true)
                         .presentationCompactAdaptation(.popover)
                 }
+        }
+    }
+}
+
+/// ✨ rewrites go to Claude with the user's own API key: entered here, kept in the keychain the keyboard shares.
+struct ClaudeKeySection: View {
+    @State private var saved = ClaudeKey.read() != nil
+    @State private var entry = ""
+    @State private var status: Status = .idle
+    enum Status: Equatable { case idle, checking, ok, failed(String) }
+
+    var body: some View {
+        Section {
+            if saved {
+                LabeledContent("Khoá API", value: "••••••••")
+                Button("Kiểm tra khoá") { Task { await check(ClaudeKey.read() ?? "") } }
+                    .disabled(status == .checking)
+                Button("Xoá khoá", role: .destructive) { ClaudeKey.save(""); saved = false; status = .idle }
+            } else {
+                SecureField("sk-ant-…", text: $entry)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .onSubmit(save)
+                Button("Lưu khoá", action: save)
+                    .disabled(entry.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || status == .checking)
+            }
+            switch status {
+            case .idle: EmptyView()
+            case .checking: HStack { ProgressView(); Text("Đang kiểm tra…").foregroundStyle(.secondary) }
+            case .ok: Label("Khoá dùng được", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            case .failed(let why): Label(why, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            }
+        } header: {
+            Text("✨ Viết lại với Claude")
+        } footer: {
+            Text("Chọn một đoạn chữ rồi chạm ✨ trên bàn phím để có ba bản: sửa lỗi, theo giọng của bạn, và tự nhiên. Đoạn chữ được gửi tới Claude Haiku của Anthropic bằng khoá API của bạn (console.anthropic.com), và tính phí vào tài khoản đó. Cần bật Cho phép Truy cập đầy đủ.")
+        }
+    }
+
+    private func save() {
+        let key = entry.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        Task {
+            await check(key)
+            if status == .ok, ClaudeKey.save(key) { saved = true; entry = "" }
+        }
+    }
+
+    @MainActor private func check(_ key: String) async {
+        status = .checking
+        switch await Claude.verify(key) {
+        case nil: status = .ok
+        case .badKey: status = .failed(String(localized: "Khoá không đúng hoặc đã bị thu hồi"))
+        case .network: status = .failed(String(localized: "Không kết nối được. Kiểm tra mạng rồi thử lại."))
+        case .http(let code, let msg): status = .failed(msg.isEmpty ? "HTTP \(code)" : msg)
+        default: status = .failed(String(localized: "Không kiểm tra được khoá"))
         }
     }
 }

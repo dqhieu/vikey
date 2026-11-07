@@ -123,6 +123,24 @@ final class AIAssistFlowTests: XCTestCase {
         XCTAssertEqual(key(vc), .sparkle)
     }
 
+    func testVIENInThePickerAsksAgainInTheOtherLanguage() {
+        AIAssist.stub = .init(rewrite: { t, s, vi in "\(s) \(vi ? "vi" : "en") \(t)" })
+        let (vc, p) = make(0)                                              // typing in English
+        p.text = "see you soon"; p.cursor = 0
+        select(p, vc, p.text)
+        settle { self.key(vc) == .sparkle }
+        tapAI(vc)
+        settle { self.allIn(vc) }
+        XCTAssertEqual(versions(vc).first, .done("polished en see you soon"), "VI/EN's language first")
+        XCTAssertEqual(vc.rewritePanelForTests?.vietnamese, false)
+        vc.rewritePanelForTests?.onToggleLanguage?()
+        XCTAssertEqual(vc.rewritePanelForTests?.vietnamese, true)
+        settle { self.allIn(vc) && self.versions(vc).first != .done("polished en see you soon") }
+        XCTAssertEqual(versions(vc), [.done("polished vi see you soon"), .done("funny vi see you soon"), .done("engaging vi see you soon")])
+        vc.rewritePanelForTests?.onPick?(.funny)
+        XCTAssertEqual(p.text, "funny vi see you soon")
+    }
+
     func testAFailedVersionSaysSoAndATapAsksAgain() {
         var engagingWorks = false
         AIAssist.stub = .init(rewrite: { t, s, _ in s == .engaging && !engagingWorks ? nil : "\(s) \(t)" })

@@ -324,6 +324,23 @@
         }
       }
     },
+    "Ngôn ngữ viết lại" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rewrite language"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ngôn ngữ viết lại"
+          }
+        }
+      }
+    },
     "Sửa lỗi" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -422,6 +439,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Viết lại"
+          }
+        }
+      }
+    },
+    "Viết lại bằng ngôn ngữ kia" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rewrites in the other language"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Viết lại bằng ngôn ngữ kia"
           }
         }
       }

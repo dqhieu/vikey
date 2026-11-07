@@ -10,16 +10,20 @@ enum RewriteVersion: Equatable {
 /// The ✨ picker, over the whole keyboard: the selection rewritten Polished, Funny and Engaging, one card each in that
 /// order (no style names on them, Hieu), filling in as each answer comes. A tap on a finished card puts it in place of
 /// the selection; a tap on a failed one asks again; Cancel, top right on the title's line (Hieu), keeps the original.
-/// Nothing changes in the app before a tap.
+/// VI | EN, just left of Cancel (Hieu), asks all three again in the other language. Nothing changes in the app before a tap.
 final class RewritePanel: UIView {
     var onPick: ((RewriteStyle) -> Void)?
     var onCancel: (() -> Void)?
+    var onToggleLanguage: (() -> Void)?
     var dark = false { didSet { restyle() } }
+    /// The versions' language: the lit half of VI | EN.
+    var vietnamese = true { didSet { restyle(); setNeedsLayout() } }
     private(set) var versions: [RewriteVersion] = Array(repeating: .loading, count: RewriteStyle.allCases.count)
     private let title = UILabel()
     private let scroll = UIScrollView()
     private var cards: [Card] = []
     private let cancel = UIButton(type: .system)
+    private let language = UIButton(type: .custom)
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -43,7 +47,12 @@ final class RewritePanel: UIView {
         cancel.layer.cornerRadius = 15; cancel.layer.cornerCurve = .continuous
         cancel.accessibilityIdentifier = "rewrite.cancel"
         cancel.addTarget(self, action: #selector(tapCancel), for: .touchUpInside)
-        [title, scroll, cancel].forEach(addSubview)
+        language.layer.cornerRadius = 15; language.layer.cornerCurve = .continuous
+        language.accessibilityIdentifier = "rewrite.language"
+        language.accessibilityLabel = String(localized: "Ngôn ngữ viết lại")
+        language.accessibilityHint = String(localized: "Viết lại bằng ngôn ngữ kia")
+        language.addTarget(self, action: #selector(tapLanguage), for: .touchUpInside)
+        [title, scroll, language, cancel].forEach(addSubview)
         restyle()
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -60,7 +69,10 @@ final class RewritePanel: UIView {
         // Cancel: a pill on the title's line, right-aligned with the cards
         let cw0 = ceil(cancel.titleLabel?.intrinsicContentSize.width ?? 40) + 28
         cancel.frame = CGRect(x: W - M - cw0, y: 8, width: cw0, height: 30)
-        title.frame = CGRect(x: M + 4, y: 14, width: cancel.frame.minX - M - 12, height: 18)
+        // VI | EN: a pill of the same height, just left of Cancel
+        let lw = ceil(language.titleLabel?.intrinsicContentSize.width ?? 50) + 28
+        language.frame = CGRect(x: cancel.frame.minX - 8 - lw, y: 8, width: lw, height: 30)
+        title.frame = CGRect(x: M + 4, y: 14, width: language.frame.minX - M - 12, height: 18)
         scroll.frame = CGRect(x: 0, y: 46, width: W, height: max(0, bounds.height - 46))
         scroll.contentInset.bottom = 8
         var y: CGFloat = 0
@@ -79,11 +91,26 @@ final class RewritePanel: UIView {
         let key = dark ? UIColor(white: 1, alpha: 0.165) : UIColor(red: 0.992, green: 1, blue: 1, alpha: 0.99)
         cancel.backgroundColor = key
         cancel.setTitleColor(fg, for: .normal)
+        language.backgroundColor = key
+        language.setAttributedTitle(languageTitle(fg), for: .normal)
+        language.setAttributedTitle(languageTitle(fg.withAlphaComponent(0.5)), for: .highlighted)
+        language.accessibilityValue = vietnamese ? "Tiếng Việt" : "English"
         for (i, c) in cards.enumerated() { c.set(i < versions.count ? versions[i] : .loading, dark: dark, background: key) }
     }
 
     @objc private func tapCard(_ c: Card) { onPick?(c.style) }
     @objc private func tapCancel() { onCancel?() }
+    @objc private func tapLanguage() { onToggleLanguage?() }
+
+    /// "VI | EN" with the versions' language lit and the other one faint.
+    private func languageTitle(_ fg: UIColor) -> NSAttributedString {
+        let on: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 15, weight: .bold), .foregroundColor: fg]
+        let off: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: fg.withAlphaComponent(0.35)]
+        let s = NSMutableAttributedString(string: "VI", attributes: vietnamese ? on : off)
+        s.append(NSAttributedString(string: "  |  ", attributes: off))
+        s.append(NSAttributedString(string: "EN", attributes: vietnamese ? off : on))
+        return s
+    }
 
     /// One style: the rewritten text, "Writing…" with a spinner, or "Couldn't rewrite · Retry". VoiceOver still
     /// reads the style's name.

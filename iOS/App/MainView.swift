@@ -18,6 +18,7 @@ struct MainView: View {
     @AppStorage("didOnboard") private var didOnboard = true
     @State private var added = KeyboardStatus.isAdded
     @State private var sample = ""
+    @FocusState private var typing: Bool
     @State private var logText = ""
     @Environment(\.scenePhase) private var phase
 
@@ -45,15 +46,26 @@ struct MainView: View {
                     }
                 }
                 Section("Thử bàn phím") {
-                    TextField("Chạm vào đây, chọn Vikey bằng 🌐 rồi gõ", text: $sample, axis: .vertical)
-                        .lineLimit(2...5)
-                        .onChange(of: sample) { _, t in
-                            #if DEBUG
-                            // simulator tests read what was typed from here
-                            let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("typed.txt")
-                            try? t.write(to: url, atomically: true, encoding: .utf8)
-                            #endif
+                    HStack(alignment: .top) {
+                        TextField("Chạm vào đây, chọn Vikey bằng 🌐 rồi gõ", text: $sample, axis: .vertical)
+                            .lineLimit(2...5)
+                            .focused($typing)
+                            .onChange(of: sample) { _, t in
+                                #if DEBUG
+                                // simulator tests read what was typed from here
+                                let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("typed.txt")
+                                try? t.write(to: url, atomically: true, encoding: .utf8)
+                                #endif
+                            }
+                        if typing {   // the Form has no other way to put the keyboard away
+                            Button { typing = false } label: {
+                                Image(systemName: "keyboard.chevron.compact.down").font(.title3)
+                            }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(Color.brand)
+                            .accessibilityLabel("Ẩn bàn phím")
                         }
+                    }
                 }
                 Section("Tự chuyển") {
                     Toggle(isOn: $autoSwitch) { Tip("Tự chuyển Anh/Việt", "Gõ một từ tiếng Anh khi đang ở tiếng Việt (hoặc ngược lại), Vikey tự sửa từ đó và chuyển chế độ. Bấm xoá ngay sau đó để hoàn tác.") }

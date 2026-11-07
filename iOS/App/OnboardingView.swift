@@ -75,7 +75,7 @@ struct OnboardingView: View {
             if added {
                 Label("Đã thêm Vikey", systemImage: "checkmark.circle.fill").foregroundStyle(.green).font(.headline)
             }
-            Text("Vikey chỉ dùng Truy cập đầy đủ để rung khi gõ phím. Bàn phím không kết nối mạng, những gì bạn gõ không rời khỏi máy.")
+            Text("Vikey chỉ dùng Truy cập đầy đủ để rung khi gõ phím. Những gì bạn gõ không rời khỏi máy, trừ đoạn chữ bạn chọn rồi chạm ✨ để viết lại: đoạn đó có thể được gửi tới Private Cloud Compute của Apple để xử lý, không được lưu lại và không ai xem được.")
                 .font(.footnote).foregroundStyle(.secondary)
             Spacer(); Spacer()
         }

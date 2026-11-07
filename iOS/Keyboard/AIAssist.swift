@@ -3,9 +3,9 @@ import Foundation
 import FoundationModels
 #endif
 
-/// Apple Intelligence in the keyboard (on-device; nothing leaves the phone): a selection rewritten in three styles,
-/// and next-word ideas. Only on iPhones with Apple Intelligence (iOS 26+, enabled, model
-/// ready); everywhere else `available` is false and the keyboard never shows these features.
+/// Apple Intelligence in the keyboard: a selection rewritten in three styles, and next-word ideas. Rewrites go to
+/// Apple's Private Cloud Compute model where it's there (iOS 27+), else the on-device one; next words stay on device.
+/// Only on iPhones with Apple Intelligence (enabled, model ready); everywhere else these features never show.
 enum AIAssist {
     #if DEBUG
     /// Tests stand in for the model (the simulator's may not be there).
@@ -27,15 +27,20 @@ enum AIAssist {
     }
     private static var cachedAvailable = false
 
+    /// Whether ✨ rewrite can answer here: the on-device model or Private Cloud Compute.
+    static var rewriteAvailable: Bool { available || cachedCloud }
+    private static var cachedCloud = false
+
     /// Asks the system off the main thread. No prewarm: loading the model at launch cost ~5 MB on top of a keyboard
     /// close to iOS's memory limit; the first answer is a little slower instead.
     static func refresh() {
         DispatchQueue.global(qos: .utility).async {
-            var on = false
+            var on = false, cloud = false
             #if canImport(FoundationModels)
             if #available(iOS 26.0, *) { on = SystemLanguageModel.default.isAvailable }
+            if #available(iOS 27.0, *) { cloud = PrivateCloudComputeLanguageModel().isAvailable }
             #endif
-            DispatchQueue.main.async { cachedAvailable = on }
+            DispatchQueue.main.async { cachedAvailable = on; cachedCloud = cloud }
         }
     }
 
@@ -57,7 +62,9 @@ enum AIAssist {
     }
     private static func model(_ core: String, _ style: RewriteStyle, _ vietnamese: Bool) async -> String? {
         #if canImport(FoundationModels)
-        if #available(iOS 26.0, *), available { return await Impl.rewrite(core, style: style, vietnamese: vietnamese) }
+        if #available(iOS 26.0, *), rewriteAvailable {
+            return await Impl.rewrite(core, style: style, vietnamese: vietnamese, cloud: cachedCloud, local: available)
+        }
         #endif
         return nil
     }
@@ -138,8 +145,19 @@ private enum Impl {
     """
 
 
-    static func rewrite(_ text: String, style: RewriteStyle, vietnamese: Bool) async -> String? {
-        let s = LanguageModelSession(instructions: rewriteRules(style, vietnamese: vietnamese))
+    /// Private Cloud Compute first when it's there (a bigger model, better Vietnamese); if it fails (no network,
+    /// quota reached, service down) the on-device model answers instead.
+    static func rewrite(_ text: String, style: RewriteStyle, vietnamese: Bool, cloud: Bool, local: Bool) async -> String? {
+        let rules = rewriteRules(style, vietnamese: vietnamese)
+        if #available(iOS 27.0, *), cloud {
+            let s = LanguageModelSession(model: PrivateCloudComputeLanguageModel(), instructions: rules)
+            if let out = await ask(s, text) { return out }
+        }
+        guard local, !Task.isCancelled else { return nil }
+        return await ask(LanguageModelSession(instructions: rules), text)
+    }
+
+    private static func ask(_ s: LanguageModelSession, _ text: String) async -> String? {
         let r: LanguageModelSession.Response<String>
         do { r = try await s.respond(to: "Rewrite this text. Reply with the rewritten text only.\n\nText:\n<<<\n\(text)\n>>>", options: GenerationOptions(sampling: .greedy)) }
         catch { NSLog("VikeyAI rewrite failed: %@", String(describing: error)); return nil }

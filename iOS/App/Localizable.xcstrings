@@ -837,19 +837,19 @@
         }
       }
     },
-    "Rung nhẹ mỗi khi chạm phím, như bàn phím của iPhone. Cần bật Cho phép Truy cập đầy đủ: Cài đặt › Vikey › Bàn phím. Vikey chỉ dùng quyền này để rung, không bao giờ gửi gì ra khỏi máy." : {
+    "Rung nhẹ mỗi khi chạm phím, như bàn phím của iPhone. Cần bật Cho phép Truy cập đầy đủ: Cài đặt › Vikey › Bàn phím. Vikey chỉ dùng quyền này để rung." : {
       "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "A light tap on every key, like the iPhone keyboard. Needs Allow Full Access: Settings › Vikey › Keyboards. Vikey only uses it for haptics and never sends anything off your phone."
+            "value" : "A light tap on every key, like the iPhone keyboard. Needs Allow Full Access: Settings › Vikey › Keyboards. Vikey only uses it for haptics."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Rung nhẹ mỗi khi chạm phím, như bàn phím của iPhone. Cần bật Cho phép Truy cập đầy đủ: Cài đặt › Vikey › Bàn phím. Vikey chỉ dùng quyền này để rung, không bao giờ gửi gì ra khỏi máy."
+            "value" : "Rung nhẹ mỗi khi chạm phím, như bàn phím của iPhone. Cần bật Cho phép Truy cập đầy đủ: Cài đặt › Vikey › Bàn phím. Vikey chỉ dùng quyền này để rung."
           }
         }
       }
@@ -1191,18 +1191,18 @@
         }
       }
     },
-    "Vikey chỉ dùng Truy cập đầy đủ để rung khi gõ phím. Bàn phím không kết nối mạng, những gì bạn gõ không rời khỏi máy." : {
+    "Vikey chỉ dùng Truy cập đầy đủ để rung khi gõ phím. Những gì bạn gõ không rời khỏi máy, trừ đoạn chữ bạn chọn rồi chạm ✨ để viết lại: đoạn đó có thể được gửi tới Private Cloud Compute của Apple để xử lý, không được lưu lại và không ai xem được." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Vikey only uses Full Access for haptics. The keyboard never uses the network; what you type stays on your phone."
+            "value" : "Vikey only uses Full Access for haptics. What you type stays on your phone, except text you select and tap ✨ to rewrite: that may be sent to Apple's Private Cloud Compute, which doesn't keep it and no one can see it."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Vikey chỉ dùng Truy cập đầy đủ để rung khi gõ phím. Bàn phím không kết nối mạng, những gì bạn gõ không rời khỏi máy."
+            "value" : "Vikey chỉ dùng Truy cập đầy đủ để rung khi gõ phím. Những gì bạn gõ không rời khỏi máy, trừ đoạn chữ bạn chọn rồi chạm ✨ để viết lại: đoạn đó có thể được gửi tới Private Cloud Compute của Apple để xử lý, không được lưu lại và không ai xem được."
           }
         }
       }

@@ -935,7 +935,7 @@ extension KeyboardViewController {
 
     /// The selection changed (or went away): start over from it. Nothing is asked until ✨ is tapped.
     private func selectionChanged() {
-        guard let sel = selection, AIAssist.available, correctsHere else {
+        guard let sel = selection, AIAssist.rewriteAvailable, correctsHere else {
             if aiState != .none { setAI(.none) }
             return
         }

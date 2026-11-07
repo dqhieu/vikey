@@ -91,7 +91,7 @@ struct MainView: View {
                     Toggle(isOn: $suggestions) { Tip("Gợi ý từ", "Hiện các từ gợi ý phía trên bàn phím, cả tiếng Việt lẫn tiếng Anh. Chạm vào một từ để dùng nó.") }
                     Toggle(isOn: $autoCorrect) { Tip("Tự sửa lỗi gõ", "Khi bạn chạm lệch phím (\"teh\" thay vì \"the\"), Vikey sửa từ đó khi bạn bấm phím cách. Bấm xoá ngay sau đó để giữ lại từ bạn gõ.") }
                     Toggle(isOn: $autoCap) { Tip("Tự viết hoa", "Chữ đầu tiên của câu được viết hoa, như bàn phím của iPhone.") }
-                    Toggle(isOn: $haptics) { Tip("Rung khi gõ", "Rung nhẹ mỗi khi chạm phím, như bàn phím của iPhone. Cần bật Cho phép Truy cập đầy đủ: Cài đặt › Vikey › Bàn phím. Vikey chỉ dùng quyền này để rung, không bao giờ gửi gì ra khỏi máy.") }
+                    Toggle(isOn: $haptics) { Tip("Rung khi gõ", "Rung nhẹ mỗi khi chạm phím, như bàn phím của iPhone. Cần bật Cho phép Truy cập đầy đủ: Cài đặt › Vikey › Bàn phím. Vikey chỉ dùng quyền này để rung.") }
                     Toggle(isOn: $doubleSpace) { Tip("Phím tắt dấu chấm", "Chạm nhanh hai lần phím cách để thêm dấu chấm và một khoảng trắng.") }
                 }
                 Section {

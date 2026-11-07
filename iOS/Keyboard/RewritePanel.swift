@@ -62,7 +62,6 @@ final class RewritePanel: UIView {
         language.accessibilityHint = String(localized: "Viết lại bằng ngôn ngữ kia")
         language.addTarget(self, action: #selector(tapLanguage), for: .touchUpInside)
         more.setImage(UIImage(systemName: "arrow.clockwise", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)), for: .normal)
-        more.layer.cornerRadius = 15; more.layer.cornerCurve = .continuous
         more.accessibilityIdentifier = "rewrite.more"
         more.accessibilityLabel = String(localized: "Viết bản khác")
         more.addTarget(self, action: #selector(tapMore), for: .touchUpInside)
@@ -86,8 +85,8 @@ final class RewritePanel: UIView {
         // VI | EN: a pill of the same height, just left of Cancel
         let lw = ceil(language.titleLabel?.intrinsicContentSize.width ?? 50) + 28
         language.frame = CGRect(x: cancel.frame.minX - 8 - lw, y: 8, width: lw, height: 30)
-        // ↻: a round pill of the same height, just left of VI | EN
-        more.frame = CGRect(x: language.frame.minX - 8 - 44, y: 8, width: 44, height: 30)
+        // ↻: just the symbol, no pill (Hieu), right up to VI | EN; the frame stays 44 wide for the finger
+        more.frame = CGRect(x: language.frame.minX - 44, y: 8, width: 44, height: 30)
         title.frame = CGRect(x: M + 4, y: 14, width: max(0, more.frame.minX - M - 12), height: 18)
         scroll.frame = CGRect(x: 0, y: 46, width: W, height: max(0, bounds.height - 46))
         scroll.contentInset.bottom = 8
@@ -108,7 +107,6 @@ final class RewritePanel: UIView {
         cancel.backgroundColor = key
         cancel.setTitleColor(fg, for: .normal)
         language.backgroundColor = key
-        more.backgroundColor = key
         more.tintColor = fg
         language.setAttributedTitle(languageTitle(fg), for: .normal)
         language.setAttributedTitle(languageTitle(fg.withAlphaComponent(0.5)), for: .highlighted)

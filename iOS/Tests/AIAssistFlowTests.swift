@@ -7,7 +7,7 @@ import UIKit
 final class AIAssistFlowTests: XCTestCase {
     private let sender = KeyboardView()
 
-    override func tearDown() { AIAssist.stub = nil; KeyboardViewController.rewriteTimeout = 30; super.tearDown() }
+    override func tearDown() { AIAssist.stub = nil; KeyboardViewController.rewriteTimeout = 60; super.tearDown() }
 
     private func make(_ lang: Int = 0) -> (KeyboardViewController, CursorProxy) {
         let vc = KeyboardViewController()
@@ -138,6 +138,8 @@ final class AIAssistFlowTests: XCTestCase {
             XCTAssertEqual(body["fallbacks"] as? String, model == .haiku ? nil : "default", "\(model)")
             XCTAssertEqual(r.value(forHTTPHeaderField: "anthropic-beta"), model == .haiku ? nil : "server-side-fallback-2026-07-01")
             XCTAssertEqual(r.value(forHTTPHeaderField: "x-api-key"), "k")
+            XCTAssertEqual((body["output_config"] as? [String: Any])?["effort"] as? String, "high")
+            XCTAssertEqual(body["max_tokens"] as? Int, 16000)
         }
         XCTAssertEqual(ClaudeModel.allCases.map(\.rawValue), ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"])
     }

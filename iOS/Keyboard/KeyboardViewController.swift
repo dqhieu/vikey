@@ -30,8 +30,8 @@ final class KeyboardViewController: UIInputViewController, KeyboardViewDelegate 
     /// Per style, the versions already shown for this selection in this language: ↻ (More) and a retry ask for
     /// something unlike them.
     private var rewriteHistory: [[String]] = Array(repeating: [], count: RewriteStyle.allCases.count)
-    /// How long one style may take before its card says it failed.
-    static var rewriteTimeout: Double = 30
+    /// How long one style may take before its card says it failed (high effort thinks for a while, more so on Opus).
+    static var rewriteTimeout: Double = 60
     private var aiNext: [String] = [], aiNextFor = ""
     private var aiNextTask: Task<Void, Never>?
     private var selection: String?

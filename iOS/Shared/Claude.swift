@@ -92,9 +92,10 @@ enum Claude {
     }
 
     /// One Messages API call whose answer must be a JSON object matching `schema` (structured outputs).
-    /// Effort `low`: a rewrite is a short, latency-sensitive job, and the model can skip thinking on easy ones.
+    /// Effort `high` (Hieu): better rewrites over speed and cost. Thinking counts toward `max_tokens` (16K, the most a
+    /// request that isn't streamed should ask for) and takes time, hence the 60 s.
     static func json(system: String, user: String, schema: [String: Any], key: String, model: ClaudeModel,
-                     effort: String = "low", maxTokens: Int = 4000, timeout: TimeInterval = 30) async -> Result<[String: Any], Failure> {
+                     effort: String = "high", maxTokens: Int = 16000, timeout: TimeInterval = 60) async -> Result<[String: Any], Failure> {
         guard let r = messagesRequest(system: system, user: user, schema: schema, key: key, model: model,
                                       effort: effort, maxTokens: maxTokens, timeout: timeout) else { return .failure(.malformed) }
         let data: Data, resp: URLResponse
@@ -117,7 +118,7 @@ enum Claude {
 
     /// The Messages API request `json` sends.
     static func messagesRequest(system: String, user: String, schema: [String: Any], key: String, model: ClaudeModel,
-                                effort: String = "low", maxTokens: Int = 4000, timeout: TimeInterval = 30) -> URLRequest? {
+                                effort: String = "high", maxTokens: Int = 16000, timeout: TimeInterval = 60) -> URLRequest? {
         var r = request("messages", key: key)
         r.httpMethod = "POST"
         r.timeoutInterval = timeout
